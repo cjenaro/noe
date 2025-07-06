@@ -6,12 +6,9 @@ export default defineContentScript({
     // Always initialize the helper to listen for messages
     initializeAfipHelper();
     
-    // Check if we're on a form page and add floating button
-    if (window.location.href.includes('rcel/jsp/index_bis.jsp') || 
-        document.querySelector('#destino, #nrodocreceptor, #razonsocialreceptor, #puntodeventa, #universocomprobante')) {
-      console.log('AFIP form page detected, adding floating button');
-      createFloatingButton();
-    }
+    // Always show floating button on AFIP pages
+    console.log('AFIP page detected, adding floating button');
+    createFloatingButton();
   },
 });
 
@@ -97,6 +94,7 @@ function createFloatingButton() {
 
 function fillStep1AndContinue(data: any) {
   console.log('fillStep1AndContinue called with data:', data);
+  console.log('Current page URL:', window.location.href);
   
   // Fill first step fields only
   const firstStepFields = {
@@ -117,6 +115,7 @@ function fillStep1AndContinue(data: any) {
         element.value = value;
         // Trigger change event to ensure form validation and dependent field updates
         element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event('input', { bubbles: true }));
         filledCount++;
         console.log(`Successfully filled ${fieldId}`);
       } else {
@@ -136,13 +135,24 @@ function fillStep1AndContinue(data: any) {
   // Wait a moment for any async validation, then click continue button
   setTimeout(() => {
     console.log('Looking for continue button...');
+    console.log('All buttons on page:', Array.from(document.querySelectorAll('input[type="button"], button')).map(btn => ({
+      tagName: btn.tagName,
+      type: btn.getAttribute('type'),
+      value: btn.getAttribute('value'),
+      onclick: btn.getAttribute('onclick'),
+      textContent: btn.textContent
+    })));
     
     // Try multiple selectors for the continue button
     const buttonSelectors = [
       'input[type="button"][onclick="validarCampos();"]',
+      'input[type="button"][onclick*="validarCampos"]',
       'input[type="button"][value*="Continuar"]',
       'input[onclick="validarCampos();"]',
-      'input[value="Continuar >"]'
+      'input[onclick*="validarCampos"]',
+      'input[value="Continuar >"]',
+      'input[value*="Continuar"]',
+      'button[onclick*="validarCampos"]'
     ];
     
     let continueButton = null;
@@ -159,15 +169,10 @@ function fillStep1AndContinue(data: any) {
       continueButton.click();
       showNotification(`Paso 1 completado (${filledCount} campos), continuando...`, 'success');
     } else {
-      console.error('Continue button not found. Available buttons:', 
-        Array.from(document.querySelectorAll('input[type="button"]')).map(btn => ({
-          value: btn.getAttribute('value'),
-          onclick: btn.getAttribute('onclick')
-        }))
-      );
+      console.error('Continue button not found.');
       showNotification(`Campos completados (${filledCount}), pero no se encontró el botón continuar`, 'error');
     }
-  }, 500);
+  }, 1000); // Increased timeout to 1 second
 }
 
 function fillStep2AndContinue(data: any) {
@@ -216,8 +221,48 @@ function fillStep2AndContinue(data: any) {
   
   console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
   
-  // Show success notification
-  showNotification(`Paso 2 completado (${filledCount} campos)`, 'success');
+  // Wait a moment for any async validation, then click continue button
+  setTimeout(() => {
+    console.log('Looking for continue button...');
+    console.log('Current page URL:', window.location.href);
+    console.log('All buttons on page:', Array.from(document.querySelectorAll('input[type="button"], button')).map(btn => ({
+      tagName: btn.tagName,
+      type: btn.getAttribute('type'),
+      value: btn.getAttribute('value'),
+      onclick: btn.getAttribute('onclick'),
+      textContent: btn.textContent
+    })));
+    
+    // Try multiple selectors for the continue button
+    const buttonSelectors = [
+      'input[type="button"][onclick="validarCampos();"]',
+      'input[type="button"][onclick*="validarCampos"]',
+      'input[type="button"][value*="Continuar"]',
+      'input[onclick="validarCampos();"]',
+      'input[onclick*="validarCampos"]',
+      'input[value="Continuar >"]',
+      'input[value*="Continuar"]',
+      'button[onclick*="validarCampos"]'
+    ];
+    
+    let continueButton = null;
+    for (const selector of buttonSelectors) {
+      continueButton = document.querySelector(selector) as HTMLInputElement;
+      if (continueButton) {
+        console.log(`Found continue button with selector: ${selector}`);
+        break;
+      }
+    }
+    
+    if (continueButton) {
+      console.log('Clicking continue button...');
+      continueButton.click();
+      showNotification(`Paso 2 completado (${filledCount} campos), continuando...`, 'success');
+    } else {
+      console.error('Continue button not found.');
+      showNotification(`Campos completados (${filledCount}), pero no se encontró el botón continuar`, 'error');
+    }
+  }, 1000); // Increased timeout to 1 second
 }
 
 function fillAfipForm(data: any) {

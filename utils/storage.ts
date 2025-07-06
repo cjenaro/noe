@@ -22,9 +22,28 @@ export interface InvoiceTemplate {
   updatedAt: number;
 }
 
+export interface WorkflowStateData {
+  state: string;
+  stepOne?: {
+    puntoVenta: string;
+    tipoComprobante: string;
+  };
+  stepTwo?: {
+    idioma: string;
+    concepto: string;
+    actividad: string;
+    fechaComprobante: string;
+    monedaExtranjera: boolean;
+    moneda: string;
+  };
+  stepThree?: {
+    paymentMethod: string;
+  };
+}
+
 class AfipStorage {
   private static instance: AfipStorage;
-  
+
   static getInstance(): AfipStorage {
     if (!AfipStorage.instance) {
       AfipStorage.instance = new AfipStorage();
@@ -32,18 +51,20 @@ class AfipStorage {
     return AfipStorage.instance;
   }
 
-  async saveClient(client: Omit<ClientData, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  async saveClient(
+    client: Omit<ClientData, "id" | "createdAt" | "updatedAt">,
+  ): Promise<string> {
     const clients = await this.getClients();
     const id = this.generateId();
     const now = Date.now();
-    
+
     const newClient: ClientData = {
       ...client,
       id,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
-    
+
     clients.push(newClient);
     await browser.storage.local.set({ clients });
     return id;
@@ -51,13 +72,13 @@ class AfipStorage {
 
   async updateClient(id: string, updates: Partial<ClientData>): Promise<void> {
     const clients = await this.getClients();
-    const index = clients.findIndex(c => c.id === id);
-    
+    const index = clients.findIndex((c) => c.id === id);
+
     if (index !== -1) {
       clients[index] = {
         ...clients[index],
         ...updates,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       };
       await browser.storage.local.set({ clients });
     }
@@ -65,46 +86,51 @@ class AfipStorage {
 
   async deleteClient(id: string): Promise<void> {
     const clients = await this.getClients();
-    const filtered = clients.filter(c => c.id !== id);
+    const filtered = clients.filter((c) => c.id !== id);
     await browser.storage.local.set({ clients: filtered });
   }
 
   async getClients(): Promise<ClientData[]> {
-    const result = await browser.storage.local.get('clients');
+    const result = await browser.storage.local.get("clients");
     return result.clients || [];
   }
 
   async getClient(id: string): Promise<ClientData | null> {
     const clients = await this.getClients();
-    return clients.find(c => c.id === id) || null;
+    return clients.find((c) => c.id === id) || null;
   }
 
-  async saveTemplate(template: Omit<InvoiceTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  async saveTemplate(
+    template: Omit<InvoiceTemplate, "id" | "createdAt" | "updatedAt">,
+  ): Promise<string> {
     const templates = await this.getTemplates();
     const id = this.generateId();
     const now = Date.now();
-    
+
     const newTemplate: InvoiceTemplate = {
       ...template,
       id,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
-    
+
     templates.push(newTemplate);
     await browser.storage.local.set({ templates });
     return id;
   }
 
-  async updateTemplate(id: string, updates: Partial<InvoiceTemplate>): Promise<void> {
+  async updateTemplate(
+    id: string,
+    updates: Partial<InvoiceTemplate>,
+  ): Promise<void> {
     const templates = await this.getTemplates();
-    const index = templates.findIndex(t => t.id === id);
-    
+    const index = templates.findIndex((t) => t.id === id);
+
     if (index !== -1) {
       templates[index] = {
         ...templates[index],
         ...updates,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
       };
       await browser.storage.local.set({ templates });
     }
@@ -112,48 +138,65 @@ class AfipStorage {
 
   async deleteTemplate(id: string): Promise<void> {
     const templates = await this.getTemplates();
-    const filtered = templates.filter(t => t.id !== id);
+    const filtered = templates.filter((t) => t.id !== id);
     await browser.storage.local.set({ templates: filtered });
   }
 
   async getTemplates(): Promise<InvoiceTemplate[]> {
-    const result = await browser.storage.local.get('templates');
+    const result = await browser.storage.local.get("templates");
     return result.templates || [];
   }
 
   async getTemplate(id: string): Promise<InvoiceTemplate | null> {
     const templates = await this.getTemplates();
-    return templates.find(t => t.id === id) || null;
+    return templates.find((t) => t.id === id) || null;
   }
 
   async exportData(): Promise<string> {
     const [clients, templates] = await Promise.all([
       this.getClients(),
-      this.getTemplates()
+      this.getTemplates(),
     ]);
-    
-    return JSON.stringify({
-      clients,
-      templates,
-      exportedAt: Date.now(),
-      version: '1.0'
-    }, null, 2);
+
+    return JSON.stringify(
+      {
+        clients,
+        templates,
+        exportedAt: Date.now(),
+        version: "1.0",
+      },
+      null,
+      2,
+    );
   }
 
   async importData(jsonData: string): Promise<void> {
     try {
       const data = JSON.parse(jsonData);
-      
+
       if (data.clients && Array.isArray(data.clients)) {
         await browser.storage.local.set({ clients: data.clients });
       }
-      
+
       if (data.templates && Array.isArray(data.templates)) {
         await browser.storage.local.set({ templates: data.templates });
       }
     } catch (error) {
-      throw new Error('Invalid import data format');
+      throw new Error("Invalid import data format");
     }
+  }
+
+  async saveWorkflowState(workflowState: WorkflowStateData): Promise<void> {
+    await browser.storage.local.set({ workflowState });
+  }
+
+  async getWorkflowState(): Promise<WorkflowStateData | null> {
+    const result = await browser.storage.local.get("workflowState");
+    return result.workflowState || null;
+  }
+
+  async clearWorkflowState(): Promise<void> {
+    await browser.storage.local.remove("workflowState");
   }
 
   private generateId(): string {
@@ -162,3 +205,4 @@ class AfipStorage {
 }
 
 export const storage = AfipStorage.getInstance();
+
