@@ -1,5 +1,6 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { storage, type ClientData } from "../../utils/storage";
+import { WorkflowStateMachine } from "@/utils/stateMachine";
 
 function App() {
   const [clients, setClients] = createSignal<ClientData[]>([]);
@@ -8,26 +9,33 @@ function App() {
     null,
   );
   const [isLoading, setIsLoading] = createSignal(true);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = createSignal("");
-  const [selectedPuntoVenta, setSelectedPuntoVenta] = createSignal("");
-  const [selectedTipoComprobante, setSelectedTipoComprobante] =
-    createSignal("");
+
+  const [stepOne, setStepOne] = createSignal({
+    puntoVenta: "",
+    tipoComprobante: "",
+  });
+
+  const [stepThree, setStepThree] = createSignal({
+    paymentMethod: "",
+  });
 
   // Step 2 fields
-  const [selectedIdioma, setSelectedIdioma] = createSignal("1"); // Default to Spanish
-  const [selectedConcepto, setSelectedConcepto] = createSignal("");
-  const [selectedActividad, setSelectedActividad] = createSignal("");
-  const [fechaComprobante, setFechaComprobante] = createSignal("");
-  const [monedaExtranjera, setMonedaExtranjera] = createSignal(false);
-  const [selectedMoneda, setSelectedMoneda] = createSignal("");
+  const [stepTwo, setStepTwo] = createSignal({
+    idioma: "1",
+    concepto: "",
+    actividad: "",
+    fechaComprobante: "",
+    monedaExtranjera: false,
+    selectedMoneda: "",
+  });
 
-  // UI state
-  const [step1Collapsed, setStep1Collapsed] = createSignal(false);
+  const [machine, setMachine] = createSignal(new WorkflowStateMachine("step1"));
 
   // Load data on mount
   createEffect(async () => {
     try {
       const clientsData = await storage.getClients();
+      // const machineState = await storage.
       setClients(clientsData);
     } catch (error) {
       console.error("Error loading clients:", error);
@@ -36,7 +44,7 @@ function App() {
     }
   });
 
-  const fillForm = async (client: ClientData) => {
+  async function fillForm(client: ClientData) {
     try {
       const [tab] = await browser.tabs.query({
         active: true,
@@ -47,25 +55,18 @@ function App() {
           action: "fillForm",
           data: {
             ...client,
-            paymentMethod: selectedPaymentMethod(),
-            puntoVenta: selectedPuntoVenta(),
-            tipoComprobante: selectedTipoComprobante(),
+            puntoVenta: stepOne().puntoVenta,
+            tipoComprobante: stepOne().tipoComprobante,
           },
         });
-        // Don't close popup automatically - let user decide
       }
     } catch (error) {
       console.error("Error filling form:", error);
     }
-  };
+  }
 
-  const fillStep1AndContinue = async () => {
+  async function fillStep1AndContinue() {
     try {
-      console.log("fillStep1AndContinue called with:", {
-        puntoVenta: selectedPuntoVenta(),
-        tipoComprobante: selectedTipoComprobante(),
-      });
-
       const [tab] = await browser.tabs.query({
         active: true,
         currentWindow: true,
@@ -86,8 +87,8 @@ function App() {
       const response = await browser.tabs.sendMessage(tab.id, {
         action: "fillStep1AndContinue",
         data: {
-          puntoVenta: selectedPuntoVenta(),
-          tipoComprobante: selectedTipoComprobante(),
+          puntoVenta: stepOne().puntoVenta,
+          tipoComprobante: stepOne().tipoComprobante,
         },
       });
 
@@ -95,7 +96,7 @@ function App() {
 
       if (response?.success) {
         showNotification("Paso 1 completado ✓", "success");
-        setStep1Collapsed(true); // Collapse Step 1 after success
+        machine().nextStep();
       } else {
         throw new Error(
           response?.error || "Error desconocido del content script",
@@ -107,7 +108,7 @@ function App() {
         error instanceof Error ? error.message : "Error desconocido";
       showNotification(`Error: ${errorMessage}`, "error");
     }
-  };
+  }
 
   const deleteClient = async (id: string) => {
     await storage.deleteClient(id);
@@ -172,7 +173,7 @@ function App() {
     input.click();
   };
 
-  const fillStep2AndContinue = async () => {
+  async function fillStep2AndContinue() {
     try {
       const [tab] = await browser.tabs.query({
         active: true,
@@ -189,20 +190,30 @@ function App() {
         );
       }
 
+      const {
+        idioma,
+        selectedMoneda,
+        concepto,
+        actividad,
+        fechaComprobante,
+        monedaExtranjera,
+      } = stepTwo();
+
       const response = await browser.tabs.sendMessage(tab.id, {
         action: "fillStep2AndContinue",
         data: {
-          idioma: selectedIdioma(),
-          concepto: selectedConcepto(),
-          actividad: selectedActividad(),
-          fechaComprobante: fechaComprobante(),
-          monedaExtranjera: monedaExtranjera(),
-          moneda: selectedMoneda(),
+          idioma,
+          concepto,
+          actividad,
+          fechaComprobante,
+          monedaExtranjera,
+          moneda: selectedMoneda,
         },
       });
 
       if (response?.success) {
         showNotification("Paso 2 completado ✓", "success");
+        machine().nextStep();
       } else {
         throw new Error(
           response?.error || "Error desconocido del content script",
@@ -214,7 +225,7 @@ function App() {
         error instanceof Error ? error.message : "Error desconocido";
       showNotification(`Error: ${errorMessage}`, "error");
     }
-  };
+  }
 
   const showNotification = (message: string, type: "success" | "error") => {
     // Create a simple notification element
@@ -229,6 +240,24 @@ function App() {
       notification.remove();
     }, 3000);
   };
+
+  function handleStepOne(key: keyof ReturnType<typeof stepOne>, value: string) {
+    setStepOne((o) => ({ ...o, [key]: value }));
+  }
+
+  function handleStepTwo(
+    key: keyof ReturnType<typeof stepTwo>,
+    value: string | boolean,
+  ) {
+    setStepTwo((o) => ({ ...o, [key]: value }));
+  }
+
+  function handleStepThree(
+    key: keyof ReturnType<typeof stepThree>,
+    value: string,
+  ) {
+    setStepThree((o) => ({ ...o, [key]: value }));
+  }
 
   return (
     <div class="w-96 min-h-[500px] max-h-[600px] bg-gray-50 font-sans box-border">
@@ -267,45 +296,37 @@ function App() {
                 >
                   📥
                 </button>
-                <button
-                  class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                  onClick={() => {
-                    setEditingClient(null);
-                    setShowForm(true);
-                  }}
-                >
-                  + Nuevo Cliente
-                </button>
               </div>
             </div>
 
             {/* Step 1: AFIP Form Configuration */}
             <div class="mb-4 border border-blue-200 rounded-md overflow-hidden">
               <div
-                class={`p-3 cursor-pointer transition-colors ${step1Collapsed() ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
-                onClick={() => setStep1Collapsed(!step1Collapsed())}
+                class={`p-3 cursor-pointer transition-colors ${machine().isStepCollapsed(1) ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
               >
                 <h3
-                  class={`text-sm font-medium flex items-center justify-between ${step1Collapsed() ? "text-green-900" : "text-blue-900"}`}
+                  class={`text-sm font-medium flex items-center justify-between ${machine().isStepCollapsed(1) ? "text-green-900" : "text-blue-900"}`}
                 >
                   <span>
-                    {step1Collapsed()
+                    {machine().isStepCollapsed(1)
                       ? "✅ Paso 1: Completado"
                       : "📋 Paso 1: Configuración AFIP"}
                   </span>
-                  <span class="text-xs">{step1Collapsed() ? "▲" : "▼"}</span>
+                  <span class="text-xs">
+                    {machine().isStepCollapsed(1) ? "▲" : "▼"}
+                  </span>
                 </h3>
               </div>
 
-              <Show when={!step1Collapsed()}>
+              <Show when={!machine().isStepCollapsed(1)}>
                 <div class="p-3 bg-blue-50 border-t border-blue-200">
                   <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-700 mb-2">
                       Punto de Venta *
                     </label>
                     <Autocomplete
-                      value={selectedPuntoVenta()}
-                      onChange={setSelectedPuntoVenta}
+                      value={stepOne().puntoVenta}
+                      onChange={(value) => handleStepOne("puntoVenta", value)}
                       options={[
                         {
                           value: "4",
@@ -327,8 +348,10 @@ function App() {
                       Tipo de Comprobante *
                     </label>
                     <Autocomplete
-                      value={selectedTipoComprobante()}
-                      onChange={setSelectedTipoComprobante}
+                      value={stepOne().tipoComprobante}
+                      onChange={(value) =>
+                        handleStepOne("tipoComprobante", value)
+                      }
                       options={[
                         { value: "39", label: "Factura de Exportación E" },
                         {
@@ -350,7 +373,7 @@ function App() {
                     class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     onClick={fillStep1AndContinue}
                     disabled={
-                      !selectedPuntoVenta() || !selectedTipoComprobante()
+                      !stepOne().puntoVenta || !stepOne().tipoComprobante
                     }
                   >
                     Continuar al Paso 2 →
@@ -360,7 +383,7 @@ function App() {
             </div>
 
             {/* Step 2: Invoice Configuration */}
-            <Show when={step1Collapsed()}>
+            <Show when={machine().isStepCollapsed(2)}>
               <div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
                 <h3 class="text-sm font-medium text-orange-900 mb-3">
                   ⚙️ Paso 2: Configuración de Factura
@@ -372,8 +395,8 @@ function App() {
                       Idioma
                     </label>
                     <Autocomplete
-                      value={selectedIdioma()}
-                      onChange={setSelectedIdioma}
+                      value={stepTwo().idioma}
+                      onChange={(value) => handleStepTwo("idioma", value)}
                       options={[
                         { value: "1", label: "Español" },
                         { value: "2", label: "Inglés" },
@@ -389,9 +412,9 @@ function App() {
                     </label>
                     <input
                       type="text"
-                      value={fechaComprobante()}
+                      value={stepTwo().fechaComprobante}
                       onInput={(e) =>
-                        setFechaComprobante(e.currentTarget.value)
+                        handleStepTwo("fechaComprobante", e.currentTarget.value)
                       }
                       placeholder="01/01/2024"
                       class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
@@ -404,8 +427,8 @@ function App() {
                     Concepto *
                   </label>
                   <Autocomplete
-                    value={selectedConcepto()}
-                    onChange={setSelectedConcepto}
+                    value={stepTwo().concepto}
+                    onChange={(value) => handleStepTwo("concepto", value)}
                     options={[
                       { value: "1", label: "Exportación definitiva de Bienes" },
                       { value: "2", label: "Servicios" },
@@ -420,8 +443,8 @@ function App() {
                     Actividad
                   </label>
                   <Autocomplete
-                    value={selectedActividad()}
-                    onChange={setSelectedActividad}
+                    value={stepTwo().actividad}
+                    onChange={(v) => handleStepTwo("actividad", v)}
                     options={[
                       {
                         value: "620100",
@@ -436,9 +459,9 @@ function App() {
                   <label class="flex items-center text-xs font-medium text-gray-700">
                     <input
                       type="checkbox"
-                      checked={monedaExtranjera()}
+                      checked={stepTwo().monedaExtranjera}
                       onChange={(e) =>
-                        setMonedaExtranjera(e.currentTarget.checked)
+                        handleStepTwo("monedaExtranjera", e.target.checked)
                       }
                       class="mr-2"
                     />
@@ -446,14 +469,16 @@ function App() {
                   </label>
                 </div>
 
-                <Show when={monedaExtranjera()}>
+                <Show when={stepTwo().monedaExtranjera}>
                   <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-700 mb-2">
                       Moneda
                     </label>
                     <Autocomplete
-                      value={selectedMoneda()}
-                      onChange={setSelectedMoneda}
+                      value={stepTwo().selectedMoneda}
+                      onChange={(value) =>
+                        handleStepTwo("selectedMoneda", value)
+                      }
                       options={[
                         { value: "DOL", label: "Dólar Estadounidense" },
                         { value: "060", label: "Euro" },
@@ -472,7 +497,7 @@ function App() {
                 <button
                   class="w-full px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                   onClick={fillStep2AndContinue}
-                  disabled={!selectedConcepto()}
+                  disabled={!stepTwo().concepto}
                 >
                   Continuar al Paso 3 →
                 </button>
@@ -480,7 +505,7 @@ function App() {
             </Show>
 
             {/* Step 3: Client Data and Payment Method */}
-            <Show when={step1Collapsed()}>
+            <Show when={machine().isStepCollapsed(3)}>
               <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
                 <h3 class="text-sm font-medium text-green-900 mb-3">
                   👥 Paso 3: Datos del Cliente
@@ -491,8 +516,8 @@ function App() {
                     Forma de Pago (opcional)
                   </label>
                   <Autocomplete
-                    value={selectedPaymentMethod()}
-                    onChange={setSelectedPaymentMethod}
+                    value={stepThree().paymentMethod}
+                    onChange={(v) => handleStepThree("paymentMethod", v)}
                     options={[
                       "A percibir en USDT",
                       "A percibir en BTC",
@@ -531,6 +556,15 @@ function App() {
             </Show>
 
             <div class="space-y-2 max-h-72 overflow-y-auto">
+              <button
+                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                onClick={() => {
+                  setEditingClient(null);
+                  setShowForm(true);
+                }}
+              >
+                + Nuevo Cliente
+              </button>
               <For each={clients()}>
                 {(client) => (
                   <div class="bg-white border border-gray-200 rounded-md p-3 flex justify-between items-center">
@@ -568,18 +602,6 @@ function App() {
                 )}
               </For>
             </div>
-
-            <Show when={clients().length === 0 && !showForm()}>
-              <div class="text-center py-8 text-gray-500">
-                <p class="text-sm mb-4">No hay clientes guardados</p>
-                <button
-                  class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
-                  onClick={() => setShowForm(true)}
-                >
-                  Crear primer cliente
-                </button>
-              </div>
-            </Show>
           </div>
         </Show>
       </main>
