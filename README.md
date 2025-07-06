@@ -225,6 +225,110 @@ if (DEBUG) {
 - Use TypeScript for type safety
 - Use Biome for linting and formatting
 
+## 📦 Publishing to Browser Stores
+
+### Chrome Web Store
+
+1. **Prepare for submission**
+   ```bash
+   bun run build
+   ```
+
+2. **Create store assets**
+   - Screenshots (1280x800 or 640x400)
+   - Store icon (128x128)
+   - Promotional images (optional)
+
+3. **Submit to Chrome Web Store**
+   - Go to [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/)
+   - Upload the `chrome-mv3.zip` file from `.output/`
+   - Fill in store listing details
+   - Set privacy policy URL
+   - Submit for review
+
+4. **Required information**
+   - Extension name: "AFIP Invoice Helper"
+   - Category: Productivity
+   - Description: Brief description of AFIP invoice automation
+   - Privacy policy: Required for extensions that handle user data
+
+### Firefox Add-ons (AMO)
+
+1. **Build Firefox version**
+   ```bash
+   bun run build:firefox
+   ```
+
+2. **Submit to Firefox Add-ons**
+   - Go to [Firefox Add-on Developer Hub](https://addons.mozilla.org/developers/)
+   - Upload the `firefox-mv3.zip` file from `.output/`
+   - Complete the submission form
+   - Submit for review
+
+3. **Firefox-specific requirements**
+   - Source code may be requested for review
+   - Ensure manifest.json is Firefox-compatible
+   - Test on Firefox before submission
+
+### Microsoft Edge Add-ons
+
+1. **Use Chrome build**
+   ```bash
+   bun run build
+   ```
+
+2. **Submit to Edge Add-ons**
+   - Go to [Microsoft Edge Add-ons Developer Dashboard](https://partner.microsoft.com/dashboard/microsoftedge/)
+   - Upload the same `chrome-mv3.zip` file
+   - Complete store listing
+   - Submit for review
+
+### Store Listing Content
+
+**Title**: AFIP Invoice Helper 🇦🇷
+
+**Short Description**: Automate AFIP electronic invoice form filling with saved client data and payment methods.
+
+**Detailed Description**:
+```
+Streamline your AFIP electronic invoice creation process with this productivity extension.
+
+Features:
+• Store and manage client information (CUIT, company details, addresses)
+• Auto-fill AFIP invoice forms with one click
+• Payment method selection with autocomplete
+• Country selection with AFIP codes
+• Export/import client data for backup
+• Works on fe.afip.gob.ar
+
+Perfect for Argentine businesses, accountants, and freelancers who regularly create electronic invoices through AFIP's platform.
+
+Privacy: All data stored locally in your browser. No external servers or data transmission.
+```
+
+**Keywords**: AFIP, Argentina, invoice, factura electronica, tax, productivity, automation
+
+**Privacy Policy**: Required - create a simple policy stating that all data is stored locally and no data is transmitted to external servers.
+
+### Pre-submission Checklist
+
+- [ ] Test extension in target browser
+- [ ] Verify all features work correctly
+- [ ] Check permissions are minimal and justified
+- [ ] Prepare store screenshots
+- [ ] Write clear store description
+- [ ] Create privacy policy
+- [ ] Test installation from zip file
+- [ ] Verify manifest.json compliance
+
+### Review Process
+
+- **Chrome**: Usually 1-3 business days
+- **Firefox**: Can take 1-2 weeks for new extensions
+- **Edge**: Usually 1-7 business days
+
+Extensions may be rejected for policy violations, so ensure compliance with each store's guidelines before submission.
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

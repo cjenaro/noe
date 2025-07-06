@@ -1,31 +1,52 @@
 export default defineContentScript({
   matches: ['*://fe.afip.gob.ar/*'],
   main() {
-    console.log('AFIP Invoice Helper loaded');
+    console.log('AFIP Invoice Helper content script loaded on:', window.location.href);
     
-    // Check if we're on the invoice form page
+    // Always initialize the helper to listen for messages
+    initializeAfipHelper();
+    
+    // Check if we're on a form page and add floating button
     if (window.location.href.includes('rcel/jsp/index_bis.jsp') || 
-        document.querySelector('#destino, #nrodocreceptor, #razonsocialreceptor')) {
-      initializeAfipHelper();
+        document.querySelector('#destino, #nrodocreceptor, #razonsocialreceptor, #puntodeventa, #universocomprobante')) {
+      console.log('AFIP form page detected, adding floating button');
+      createFloatingButton();
     }
   },
 });
 
 function initializeAfipHelper() {
-  console.log('AFIP form detected, initializing helper...');
-  
-  // Add floating action button for quick access
-  createFloatingButton();
+  console.log('AFIP helper initializing message listeners...');
   
   // Listen for messages from popup
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.action === 'fillForm') {
-      fillAfipForm(message.data);
-      sendResponse({ success: true });
-    } else if (message.action === 'extractForm') {
-      const formData = extractFormData();
-      sendResponse({ data: formData });
+    console.log('Content script received message:', message);
+    
+    try {
+      if (message.action === 'fillForm') {
+        fillAfipForm(message.data);
+        sendResponse({ success: true });
+      } else if (message.action === 'fillStep1AndContinue') {
+        fillStep1AndContinue(message.data);
+        sendResponse({ success: true });
+      } else if (message.action === 'fillStep2AndContinue') {
+        fillStep2AndContinue(message.data);
+        sendResponse({ success: true });
+      } else if (message.action === 'extractForm') {
+        const formData = extractFormData();
+        sendResponse({ data: formData });
+      } else {
+        console.log('Unknown action:', message.action);
+        sendResponse({ success: false, error: 'Unknown action' });
+      }
+    } catch (error) {
+      console.error('Error handling message:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      sendResponse({ success: false, error: errorMessage });
     }
+    
+    // Return true to indicate we will send a response asynchronously
+    return true;
   });
 }
 
@@ -74,8 +95,140 @@ function createFloatingButton() {
   document.body.appendChild(button);
 }
 
+function fillStep1AndContinue(data: any) {
+  console.log('fillStep1AndContinue called with data:', data);
+  
+  // Fill first step fields only
+  const firstStepFields = {
+    puntodeventa: data.puntoVenta,
+    universocomprobante: data.tipoComprobante
+  };
+  
+  let filledCount = 0;
+  let errors: string[] = [];
+  
+  // Fill first step fields
+  Object.entries(firstStepFields).forEach(([fieldId, value]) => {
+    console.log(`Trying to fill field ${fieldId} with value:`, value);
+    if (value) {
+      const element = document.getElementById(fieldId) as HTMLSelectElement;
+      if (element) {
+        console.log(`Found element ${fieldId}, setting value...`);
+        element.value = value;
+        // Trigger change event to ensure form validation and dependent field updates
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        filledCount++;
+        console.log(`Successfully filled ${fieldId}`);
+      } else {
+        const error = `Element with ID '${fieldId}' not found`;
+        console.error(error);
+        errors.push(error);
+      }
+    } else {
+      const error = `No value provided for ${fieldId}`;
+      console.warn(error);
+      errors.push(error);
+    }
+  });
+  
+  console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
+  
+  // Wait a moment for any async validation, then click continue button
+  setTimeout(() => {
+    console.log('Looking for continue button...');
+    
+    // Try multiple selectors for the continue button
+    const buttonSelectors = [
+      'input[type="button"][onclick="validarCampos();"]',
+      'input[type="button"][value*="Continuar"]',
+      'input[onclick="validarCampos();"]',
+      'input[value="Continuar >"]'
+    ];
+    
+    let continueButton = null;
+    for (const selector of buttonSelectors) {
+      continueButton = document.querySelector(selector) as HTMLInputElement;
+      if (continueButton) {
+        console.log(`Found continue button with selector: ${selector}`);
+        break;
+      }
+    }
+    
+    if (continueButton) {
+      console.log('Clicking continue button...');
+      continueButton.click();
+      showNotification(`Paso 1 completado (${filledCount} campos), continuando...`, 'success');
+    } else {
+      console.error('Continue button not found. Available buttons:', 
+        Array.from(document.querySelectorAll('input[type="button"]')).map(btn => ({
+          value: btn.getAttribute('value'),
+          onclick: btn.getAttribute('onclick')
+        }))
+      );
+      showNotification(`Campos completados (${filledCount}), pero no se encontró el botón continuar`, 'error');
+    }
+  }, 500);
+}
+
+function fillStep2AndContinue(data: any) {
+  console.log('fillStep2AndContinue called with data:', data);
+  
+  // Step 2 fields mapping
+  const step2Fields = {
+    ididioma: data.idioma,
+    fc: data.fechaComprobante, // fecha comprobante
+    idconcepto: data.concepto,
+    actiAsociadaId: data.actividad,
+    monedaextranjera: data.monedaExtranjera ? 'on' : '', // checkbox
+    moneda: data.moneda
+  };
+  
+  let filledCount = 0;
+  let errors: string[] = [];
+  
+  // Fill step 2 fields
+  Object.entries(step2Fields).forEach(([fieldId, value]) => {
+    console.log(`Trying to fill field ${fieldId} with value:`, value);
+    if (value !== undefined && value !== '') {
+      const element = document.getElementById(fieldId) as HTMLInputElement | HTMLSelectElement;
+      if (element) {
+        console.log(`Found element ${fieldId}, setting value...`);
+        
+        if (element.type === 'checkbox') {
+          (element as HTMLInputElement).checked = value === 'on';
+          // Trigger click event for checkboxes to ensure proper handling
+          element.click();
+        } else {
+          element.value = value;
+        }
+        
+        // Trigger change event to ensure form validation and dependent field updates
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+        filledCount++;
+        console.log(`Successfully filled ${fieldId}`);
+      } else {
+        const error = `Element with ID '${fieldId}' not found`;
+        console.error(error);
+        errors.push(error);
+      }
+    }
+  });
+  
+  console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
+  
+  // Show success notification
+  showNotification(`Paso 2 completado (${filledCount} campos)`, 'success');
+}
+
 function fillAfipForm(data: any) {
-  const fields = {
+  // First step fields (punto de venta and tipo de comprobante)
+  const firstStepFields = {
+    puntodeventa: data.puntoVenta,
+    universocomprobante: data.tipoComprobante
+  };
+  
+  // Second step fields (client data)
+  const secondStepFields = {
     destino: data.country,
     nrodocreceptor: data.cuit,
     nrodocextranjeroreceptor: data.cuit, // Fill both CUIT fields with same value
@@ -88,7 +241,20 @@ function fillAfipForm(data: any) {
     otrosdatoscomerciales: data.otherData
   };
   
-  Object.entries(fields).forEach(([fieldId, value]) => {
+  // Fill first step fields
+  Object.entries(firstStepFields).forEach(([fieldId, value]) => {
+    if (value) {
+      const element = document.getElementById(fieldId) as HTMLSelectElement;
+      if (element) {
+        element.value = value;
+        // Trigger change event to ensure form validation and dependent field updates
+        element.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
+  });
+  
+  // Fill second step fields
+  Object.entries(secondStepFields).forEach(([fieldId, value]) => {
     if (value) {
       const element = document.getElementById(fieldId) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
       if (element) {
@@ -100,7 +266,8 @@ function fillAfipForm(data: any) {
   });
   
   // Show success notification
-  showNotification('Formulario completado exitosamente', 'success');
+  const filledFields = Object.values({...firstStepFields, ...secondStepFields}).filter(Boolean).length;
+  showNotification(`Formulario completado: ${filledFields} campos rellenados`, 'success');
 }
 
 function extractFormData() {

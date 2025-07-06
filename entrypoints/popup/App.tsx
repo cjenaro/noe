@@ -9,6 +9,20 @@ function App() {
   );
   const [isLoading, setIsLoading] = createSignal(true);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = createSignal("");
+  const [selectedPuntoVenta, setSelectedPuntoVenta] = createSignal("");
+  const [selectedTipoComprobante, setSelectedTipoComprobante] =
+    createSignal("");
+
+  // Step 2 fields
+  const [selectedIdioma, setSelectedIdioma] = createSignal("1"); // Default to Spanish
+  const [selectedConcepto, setSelectedConcepto] = createSignal("");
+  const [selectedActividad, setSelectedActividad] = createSignal("");
+  const [fechaComprobante, setFechaComprobante] = createSignal("");
+  const [monedaExtranjera, setMonedaExtranjera] = createSignal(false);
+  const [selectedMoneda, setSelectedMoneda] = createSignal("");
+
+  // UI state
+  const [step1Collapsed, setStep1Collapsed] = createSignal(false);
 
   // Load data on mount
   createEffect(async () => {
@@ -34,12 +48,64 @@ function App() {
           data: {
             ...client,
             paymentMethod: selectedPaymentMethod(),
+            puntoVenta: selectedPuntoVenta(),
+            tipoComprobante: selectedTipoComprobante(),
           },
         });
-        window.close();
+        // Don't close popup automatically - let user decide
       }
     } catch (error) {
       console.error("Error filling form:", error);
+    }
+  };
+
+  const fillStep1AndContinue = async () => {
+    try {
+      console.log("fillStep1AndContinue called with:", {
+        puntoVenta: selectedPuntoVenta(),
+        tipoComprobante: selectedTipoComprobante(),
+      });
+
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (!tab.id) {
+        throw new Error("No active tab found");
+      }
+
+      if (!tab.url?.includes("fe.afip.gob.ar")) {
+        throw new Error(
+          "No estás en una página de AFIP. Ve a fe.afip.gob.ar primero.",
+        );
+      }
+
+      console.log("Sending message to tab:", tab.url);
+
+      const response = await browser.tabs.sendMessage(tab.id, {
+        action: "fillStep1AndContinue",
+        data: {
+          puntoVenta: selectedPuntoVenta(),
+          tipoComprobante: selectedTipoComprobante(),
+        },
+      });
+
+      console.log("Content script response:", response);
+
+      if (response?.success) {
+        showNotification("Paso 1 completado ✓", "success");
+        setStep1Collapsed(true); // Collapse Step 1 after success
+      } else {
+        throw new Error(
+          response?.error || "Error desconocido del content script",
+        );
+      }
+    } catch (error) {
+      console.error("Error filling step 1:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
+      showNotification(`Error: ${errorMessage}`, "error");
     }
   };
 
@@ -61,16 +127,111 @@ function App() {
     setEditingClient(null);
   };
 
+  const exportData = async () => {
+    try {
+      const exportedData = await storage.exportData();
+      const blob = new Blob([exportedData], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `afip-helper-backup-${new Date().toISOString().split("T")[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showNotification("Datos exportados exitosamente", "success");
+    } catch (error) {
+      console.error("Error exporting data:", error);
+      showNotification("Error al exportar datos", "error");
+    }
+  };
+
+  const importData = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        await storage.importData(text);
+        setClients(await storage.getClients());
+        showNotification("Datos importados exitosamente", "success");
+      } catch (error) {
+        console.error("Error importing data:", error);
+        showNotification(
+          "Error al importar datos. Verifica que el archivo sea válido.",
+          "error",
+        );
+      }
+    };
+    input.click();
+  };
+
+  const fillStep2AndContinue = async () => {
+    try {
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (!tab.id) {
+        throw new Error("No active tab found");
+      }
+
+      if (!tab.url?.includes("fe.afip.gob.ar")) {
+        throw new Error(
+          "No estás en una página de AFIP. Ve a fe.afip.gob.ar primero.",
+        );
+      }
+
+      const response = await browser.tabs.sendMessage(tab.id, {
+        action: "fillStep2AndContinue",
+        data: {
+          idioma: selectedIdioma(),
+          concepto: selectedConcepto(),
+          actividad: selectedActividad(),
+          fechaComprobante: fechaComprobante(),
+          monedaExtranjera: monedaExtranjera(),
+          moneda: selectedMoneda(),
+        },
+      });
+
+      if (response?.success) {
+        showNotification("Paso 2 completado ✓", "success");
+      } else {
+        throw new Error(
+          response?.error || "Error desconocido del content script",
+        );
+      }
+    } catch (error) {
+      console.error("Error filling step 2:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
+      showNotification(`Error: ${errorMessage}`, "error");
+    }
+  };
+
+  const showNotification = (message: string, type: "success" | "error") => {
+    // Create a simple notification element
+    const notification = document.createElement("div");
+    notification.className = `fixed top-5 right-5 px-4 py-3 text-white rounded-md text-xs z-[10000] shadow-lg ${
+      type === "success" ? "bg-green-500" : "bg-red-500"
+    }`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+      notification.remove();
+    }, 3000);
+  };
+
   return (
-    <div
-      class="bg-gray-50 font-sans"
-      style={{
-        width: "400px",
-        "min-height": "500px",
-        "max-height": "600px",
-        "box-sizing": "border-box",
-      }}
-    >
+    <div class="w-96 min-h-[500px] max-h-[600px] bg-gray-50 font-sans box-border">
       <header class="bg-blue-600 text-white p-4 text-center">
         <h1 class="text-lg font-semibold mb-1">🇦🇷 AFIP Helper</h1>
         <p class="text-xs opacity-90">
@@ -91,27 +252,272 @@ function App() {
               <h2 class="text-base font-medium text-gray-900">
                 Clientes Guardados
               </h2>
-              <button
-                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
-                onClick={() => {
-                  setEditingClient(null);
-                  setShowForm(true);
-                }}
-              >
-                + Nuevo Cliente
-              </button>
+              <div class="flex gap-2">
+                <button
+                  class="px-2 py-1.5 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
+                  onClick={exportData}
+                  title="Exportar datos"
+                >
+                  📤
+                </button>
+                <button
+                  class="px-2 py-1.5 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
+                  onClick={importData}
+                  title="Importar datos"
+                >
+                  📥
+                </button>
+                <button
+                  class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                  onClick={() => {
+                    setEditingClient(null);
+                    setShowForm(true);
+                  }}
+                >
+                  + Nuevo Cliente
+                </button>
+              </div>
             </div>
 
-            {/* Payment Method Selection - Global for all transactions */}
-            <div class="mb-4 p-3 bg-white border border-gray-200 rounded-md">
-              <label class="block text-xs font-medium text-gray-700 mb-2">
-                Forma de Pago (para esta transacción)
-              </label>
-              <PaymentMethodSelect
-                value={selectedPaymentMethod()}
-                onChange={setSelectedPaymentMethod}
-              />
+            {/* Step 1: AFIP Form Configuration */}
+            <div class="mb-4 border border-blue-200 rounded-md overflow-hidden">
+              <div
+                class={`p-3 cursor-pointer transition-colors ${step1Collapsed() ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
+                onClick={() => setStep1Collapsed(!step1Collapsed())}
+              >
+                <h3
+                  class={`text-sm font-medium flex items-center justify-between ${step1Collapsed() ? "text-green-900" : "text-blue-900"}`}
+                >
+                  <span>
+                    {step1Collapsed()
+                      ? "✅ Paso 1: Completado"
+                      : "📋 Paso 1: Configuración AFIP"}
+                  </span>
+                  <span class="text-xs">{step1Collapsed() ? "▲" : "▼"}</span>
+                </h3>
+              </div>
+
+              <Show when={!step1Collapsed()}>
+                <div class="p-3 bg-blue-50 border-t border-blue-200">
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Punto de Venta *
+                    </label>
+                    <Autocomplete
+                      value={selectedPuntoVenta()}
+                      onChange={setSelectedPuntoVenta}
+                      options={[
+                        {
+                          value: "4",
+                          label:
+                            "00004-San Lorenzo 501 Piso:21 Dpto:B - Barrio Nueva Cordoba, Córdoba",
+                        },
+                        {
+                          value: "2",
+                          label:
+                            "00002-San Lorenzo 501 Piso:21 Dpto:B - Barrio Nueva Cordoba, Córdoba",
+                        },
+                      ]}
+                      placeholder="Seleccionar punto de venta..."
+                    />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Tipo de Comprobante *
+                    </label>
+                    <Autocomplete
+                      value={selectedTipoComprobante()}
+                      onChange={setSelectedTipoComprobante}
+                      options={[
+                        { value: "39", label: "Factura de Exportación E" },
+                        {
+                          value: "41",
+                          label:
+                            "Nota de Débito por Operaciones con el Exterior E",
+                        },
+                        {
+                          value: "43",
+                          label:
+                            "Nota de Crédito por Operaciones con el Exterior E",
+                        },
+                      ]}
+                      placeholder="Seleccionar tipo de comprobante..."
+                    />
+                  </div>
+
+                  <button
+                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={fillStep1AndContinue}
+                    disabled={
+                      !selectedPuntoVenta() || !selectedTipoComprobante()
+                    }
+                  >
+                    Continuar al Paso 2 →
+                  </button>
+                </div>
+              </Show>
             </div>
+
+            {/* Step 2: Invoice Configuration */}
+            <Show when={step1Collapsed()}>
+              <div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                <h3 class="text-sm font-medium text-orange-900 mb-3">
+                  ⚙️ Paso 2: Configuración de Factura
+                </h3>
+
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Idioma
+                    </label>
+                    <Autocomplete
+                      value={selectedIdioma()}
+                      onChange={setSelectedIdioma}
+                      options={[
+                        { value: "1", label: "Español" },
+                        { value: "2", label: "Inglés" },
+                        { value: "3", label: "Portugués" },
+                      ]}
+                      placeholder="Seleccionar idioma..."
+                    />
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Fecha (DD/MM/YYYY)
+                    </label>
+                    <input
+                      type="text"
+                      value={fechaComprobante()}
+                      onInput={(e) =>
+                        setFechaComprobante(e.currentTarget.value)
+                      }
+                      placeholder="01/01/2024"
+                      class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    />
+                  </div>
+                </div>
+
+                <div class="mb-3">
+                  <label class="block text-xs font-medium text-gray-700 mb-2">
+                    Concepto *
+                  </label>
+                  <Autocomplete
+                    value={selectedConcepto()}
+                    onChange={setSelectedConcepto}
+                    options={[
+                      { value: "1", label: "Exportación definitiva de Bienes" },
+                      { value: "2", label: "Servicios" },
+                      { value: "4", label: "Otros" },
+                    ]}
+                    placeholder="Seleccionar concepto..."
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label class="block text-xs font-medium text-gray-700 mb-2">
+                    Actividad
+                  </label>
+                  <Autocomplete
+                    value={selectedActividad()}
+                    onChange={setSelectedActividad}
+                    options={[
+                      {
+                        value: "620100",
+                        label: "620100 - SERVICIOS DE CONSULTORES EN INF...",
+                      },
+                    ]}
+                    placeholder="Seleccionar actividad..."
+                  />
+                </div>
+
+                <div class="mb-3">
+                  <label class="flex items-center text-xs font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={monedaExtranjera()}
+                      onChange={(e) =>
+                        setMonedaExtranjera(e.currentTarget.checked)
+                      }
+                      class="mr-2"
+                    />
+                    Moneda Extranjera
+                  </label>
+                </div>
+
+                <Show when={monedaExtranjera()}>
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Moneda
+                    </label>
+                    <Autocomplete
+                      value={selectedMoneda()}
+                      onChange={setSelectedMoneda}
+                      options={[
+                        { value: "DOL", label: "Dólar Estadounidense" },
+                        { value: "060", label: "Euro" },
+                        { value: "021", label: "Libra Esterlina" },
+                        { value: "019", label: "Yens" },
+                        { value: "012", label: "Real" },
+                        { value: "018", label: "Dólar Canadiense" },
+                        { value: "026", label: "Dólar Australiano" },
+                        { value: "009", label: "Franco Suizo" },
+                      ]}
+                      placeholder="Seleccionar moneda..."
+                    />
+                  </div>
+                </Show>
+
+                <button
+                  class="w-full px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  onClick={fillStep2AndContinue}
+                  disabled={!selectedConcepto()}
+                >
+                  Continuar al Paso 3 →
+                </button>
+              </div>
+            </Show>
+
+            {/* Step 3: Client Data and Payment Method */}
+            <Show when={step1Collapsed()}>
+              <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                <h3 class="text-sm font-medium text-green-900 mb-3">
+                  👥 Paso 3: Datos del Cliente
+                </h3>
+
+                <div class="mb-3">
+                  <label class="block text-xs font-medium text-gray-700 mb-2">
+                    Forma de Pago (opcional)
+                  </label>
+                  <Autocomplete
+                    value={selectedPaymentMethod()}
+                    onChange={setSelectedPaymentMethod}
+                    options={[
+                      "A percibir en USDT",
+                      "A percibir en BTC",
+                      "A percibir en ETH",
+                      "A percibir en USDC",
+                      "A percibir en DAI",
+                      "A percibir en ARS",
+                      "A percibir en USD",
+                      "A percibir en EUR",
+                      "Transferencia bancaria",
+                      "Efectivo",
+                      "Cheque",
+                      "Tarjeta de crédito",
+                      "Tarjeta de débito",
+                      "Mercado Pago",
+                      "PayPal",
+                      "Western Union",
+                      "MoneyGram",
+                    ].map((method) => ({ value: method, label: method }))}
+                    placeholder="Escribir o seleccionar forma de pago..."
+                    allowCustom={true}
+                  />
+                </div>
+              </div>
+            </Show>
 
             <Show when={showForm()}>
               <ClientForm
@@ -139,12 +545,6 @@ function App() {
                       <button
                         class="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
                         onClick={() => fillForm(client)}
-                        disabled={!selectedPaymentMethod()}
-                        title={
-                          !selectedPaymentMethod()
-                            ? "Selecciona una forma de pago primero"
-                            : ""
-                        }
                       >
                         Usar
                       </button>
@@ -275,9 +675,33 @@ function ClientForm(props: {
         <label class="block text-xs font-medium text-gray-700 mb-1">
           País Destino
         </label>
-        <CountrySelect
+        <Autocomplete
           value={formData().country}
           onChange={(value) => updateField("country", value)}
+          options={[
+            { value: "200", label: "ARGENTINA" },
+            { value: "212", label: "ESTADOS UNIDOS" },
+            { value: "203", label: "BRASIL" },
+            { value: "208", label: "CHILE" },
+            { value: "225", label: "URUGUAY" },
+            { value: "221", label: "PARAGUAY" },
+            { value: "202", label: "BOLIVIA" },
+            { value: "222", label: "PERU" },
+            { value: "205", label: "COLOMBIA" },
+            { value: "226", label: "VENEZUELA" },
+            { value: "210", label: "ECUADOR" },
+            { value: "410", label: "ESPAÑA" },
+            { value: "412", label: "FRANCIA" },
+            { value: "417", label: "ITALIA" },
+            { value: "438", label: "ALEMANIA,REP.FED." },
+            { value: "426", label: "REINO UNIDO" },
+            { value: "204", label: "CANADA" },
+            { value: "218", label: "MEXICO" },
+            { value: "320", label: "JAPON" },
+            { value: "310", label: "CHINA" },
+            { value: "501", label: "AUSTRALIA" },
+          ]}
+          placeholder="Seleccionar país..."
         />
       </div>
 
@@ -300,145 +724,79 @@ function ClientForm(props: {
   );
 }
 
-// Country autocomplete component
-function CountrySelect(props: {
+// Reusable Autocomplete component
+function Autocomplete(props: {
   value: string;
   onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  placeholder?: string;
+  allowCustom?: boolean;
 }) {
   const [isOpen, setIsOpen] = createSignal(false);
   const [searchTerm, setSearchTerm] = createSignal("");
 
-  const countries = [
-    { value: "200", label: "ARGENTINA" },
-    { value: "212", label: "ESTADOS UNIDOS" },
-    { value: "203", label: "BRASIL" },
-    { value: "208", label: "CHILE" },
-    { value: "225", label: "URUGUAY" },
-    { value: "221", label: "PARAGUAY" },
-    { value: "202", label: "BOLIVIA" },
-    { value: "222", label: "PERU" },
-    { value: "205", label: "COLOMBIA" },
-    { value: "226", label: "VENEZUELA" },
-    { value: "210", label: "ECUADOR" },
-    { value: "410", label: "ESPAÑA" },
-    { value: "412", label: "FRANCIA" },
-    { value: "417", label: "ITALIA" },
-    { value: "438", label: "ALEMANIA,REP.FED." },
-    { value: "426", label: "REINO UNIDO" },
-    { value: "204", label: "CANADA" },
-    { value: "218", label: "MEXICO" },
-    { value: "320", label: "JAPON" },
-    { value: "310", label: "CHINA" },
-    { value: "501", label: "AUSTRALIA" },
-  ];
-
-  const filteredCountries = () => {
-    if (!searchTerm()) return countries;
-    return countries.filter((country) =>
-      country.label.toLowerCase().includes(searchTerm().toLowerCase()),
+  const filteredOptions = () => {
+    const term = props.allowCustom ? props.value : searchTerm();
+    if (!term) return props.options;
+    return props.options.filter((option) =>
+      option.label.toLowerCase().includes(term.toLowerCase()),
     );
   };
 
-  const selectedCountry = () => {
-    return countries.find((c) => c.value === props.value);
+  const selectedOption = () => {
+    return props.options.find((option) => option.value === props.value);
+  };
+
+  const displayValue = () => {
+    if (props.allowCustom) return props.value;
+    return selectedOption()?.label || "";
+  };
+
+  const handleSelect = (option: { value: string; label: string }) => {
+    props.onChange(option.value);
+    setIsOpen(false);
+    setSearchTerm("");
   };
 
   return (
     <div class="relative">
-      <div
-        class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer bg-white"
-        onClick={() => setIsOpen(!isOpen())}
-      >
-        {selectedCountry()?.label || "Seleccionar país..."}
-      </div>
-
-      <Show when={isOpen()}>
-        <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-          <input
-            type="text"
-            placeholder="Buscar país..."
-            value={searchTerm()}
-            onInput={(e) => setSearchTerm(e.currentTarget.value)}
-            class="w-full px-2 py-1.5 text-xs border-b border-gray-200 focus:outline-none"
-          />
-          <For each={filteredCountries()}>
-            {(country) => (
-              <div
-                class="px-2 py-1.5 text-xs hover:bg-blue-50 cursor-pointer"
-                onClick={() => {
-                  props.onChange(country.value);
-                  setIsOpen(false);
-                  setSearchTerm("");
-                }}
-              >
-                {country.label}
-              </div>
-            )}
-          </For>
+      {props.allowCustom ? (
+        <input
+          type="text"
+          value={displayValue()}
+          onInput={(e) => props.onChange(e.currentTarget.value)}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => setTimeout(() => setIsOpen(false), 150)}
+          placeholder={props.placeholder || "Escribir o seleccionar..."}
+          class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        />
+      ) : (
+        <div
+          class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer bg-white"
+          onClick={() => setIsOpen(!isOpen())}
+        >
+          {displayValue() || props.placeholder || "Seleccionar..."}
         </div>
-      </Show>
-    </div>
-  );
-}
-
-// Payment method autocomplete component
-function PaymentMethodSelect(props: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const [isOpen, setIsOpen] = createSignal(false);
-
-  const paymentMethods = [
-    "A percibir en USDT",
-    "A percibir en BTC",
-    "A percibir en ETH",
-    "A percibir en USDC",
-    "A percibir en DAI",
-    "A percibir en ARS",
-    "A percibir en USD",
-    "A percibir en EUR",
-    "Transferencia bancaria",
-    "Efectivo",
-    "Cheque",
-    "Tarjeta de crédito",
-    "Tarjeta de débito",
-    "Mercado Pago",
-    "PayPal",
-    "Western Union",
-    "MoneyGram",
-  ];
-
-  const filteredMethods = () => {
-    if (!props.value) return paymentMethods;
-    return paymentMethods.filter((method) =>
-      method.toLowerCase().includes(props.value.toLowerCase()),
-    );
-  };
-
-  return (
-    <div class="relative">
-      <input
-        type="text"
-        value={props.value}
-        onInput={(e) => props.onChange(e.currentTarget.value)}
-        onFocus={() => setIsOpen(true)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-        placeholder="Escribir o seleccionar..."
-        class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      />
+      )}
 
       <Show when={isOpen()}>
         <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-          <For each={filteredMethods()}>
-            {(method) => (
+          {!props.allowCustom && (
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={searchTerm()}
+              onInput={(e) => setSearchTerm(e.currentTarget.value)}
+              class="w-full px-2 py-1.5 text-xs border-b border-gray-200 focus:outline-none"
+            />
+          )}
+          <For each={filteredOptions()}>
+            {(option) => (
               <div
                 class="px-2 py-1.5 text-xs hover:bg-blue-50 cursor-pointer"
-                onMouseDown={() => {
-                  props.onChange(method);
-                  setIsOpen(false);
-                }}
+                onMouseDown={() => handleSelect(option)}
               >
-                {method}
+                {option.label}
               </div>
             )}
           </For>
@@ -449,4 +807,3 @@ function PaymentMethodSelect(props: {
 }
 
 export default App;
-
