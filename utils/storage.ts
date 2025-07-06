@@ -3,11 +3,9 @@ export interface ClientData {
   name: string;
   country: string;
   cuit: string;
-  foreignTaxId?: string;
   companyName: string;
   address: string;
   email: string;
-  paymentMethod?: string;
   incoterm?: string;
   incotermDetail?: string;
   otherData?: string;

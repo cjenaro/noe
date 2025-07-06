@@ -52,8 +52,15 @@ function createFloatingButton() {
     transition: all 0.3s ease;
   `;
   
-  button.addEventListener('click', () => {
-    browser.runtime.sendMessage({ action: 'openPopup' });
+  button.addEventListener('click', async () => {
+    try {
+      // Send message to background script to open popup
+      await browser.runtime.sendMessage({ action: 'openPopup' });
+    } catch (error) {
+      console.error('Error requesting popup:', error);
+      // Fallback: Show notification only if there's an actual error
+      showNotification('Haz clic en el ícono 🇦🇷 en la barra de herramientas para abrir AFIP Helper', 'error');
+    }
   });
   
   button.addEventListener('mouseenter', () => {
@@ -71,7 +78,7 @@ function fillAfipForm(data: any) {
   const fields = {
     destino: data.country,
     nrodocreceptor: data.cuit,
-    nrodocextranjeroreceptor: data.foreignTaxId,
+    nrodocextranjeroreceptor: data.cuit, // Fill both CUIT fields with same value
     razonsocialreceptor: data.companyName,
     domicilioreceptor: data.address,
     email: data.email,
@@ -104,8 +111,7 @@ function extractFormData() {
   
   return {
     country: getValue('destino'),
-    cuit: getValue('nrodocreceptor'),
-    foreignTaxId: getValue('nrodocextranjeroreceptor'),
+    cuit: getValue('nrodocreceptor'), // Use CUIT as primary value
     companyName: getValue('razonsocialreceptor'),
     address: getValue('domicilioreceptor'),
     email: getValue('email'),

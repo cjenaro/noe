@@ -12,5 +12,12 @@ export default defineConfig({
     host_permissions: ['*://fe.afip.gob.ar/*'],
     name: 'AFIP Invoice Helper',
     description: 'Automate and streamline AFIP electronic invoice creation with saved client data and templates',
+    content_security_policy: {
+      extension_pages: "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline';"
+    },
+    action: {
+      default_popup: 'popup.html',
+      default_title: 'AFIP Invoice Helper'
+    }
   },
 });
