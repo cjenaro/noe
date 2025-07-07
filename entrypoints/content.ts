@@ -32,6 +32,9 @@ function initializeAfipHelper() {
       } else if (message.action === 'extractForm') {
         const formData = extractFormData();
         sendResponse({ data: formData });
+      } else if (message.action === 'getSelectOptions') {
+        const options = getSelectOptions(message.fieldId);
+        sendResponse({ success: true, options });
       } else {
         console.log('Unknown action:', message.action);
         sendResponse({ success: false, error: 'Unknown action' });
@@ -336,6 +339,34 @@ function extractFormData() {
     incotermDetail: getValue('detalleincoterm'),
     otherData: getValue('otrosdatoscomerciales')
   };
+}
+
+function getSelectOptions(fieldId: string): Array<{ value: string; label: string }> {
+  console.log(`Getting options for field: ${fieldId}`);
+  
+  const selectElement = document.getElementById(fieldId) as HTMLSelectElement;
+  if (!selectElement) {
+    console.warn(`Select element with ID '${fieldId}' not found`);
+    return [];
+  }
+  
+  const options: Array<{ value: string; label: string }> = [];
+  
+  // Get all option elements
+  const optionElements = selectElement.querySelectorAll('option');
+  
+  optionElements.forEach((option) => {
+    const value = option.value;
+    const label = option.textContent?.trim() || option.innerText?.trim() || '';
+    
+    // Skip empty options or placeholder options
+    if (value && value !== '' && label && label !== 'Seleccionar...') {
+      options.push({ value, label });
+    }
+  });
+  
+  console.log(`Found ${options.length} options for ${fieldId}:`, options);
+  return options;
 }
 
 function showNotification(message: string, type: 'success' | 'error' | 'info' = 'success') {
