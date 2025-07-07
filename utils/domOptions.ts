@@ -59,3 +59,22 @@ export async function fetchMultipleFieldOptions(fieldKeys: FieldKey[]): Promise<
   
   return results;
 }
+
+// Update a DOM field immediately
+export async function updateDOMField(fieldKey: FieldKey, value: string): Promise<void> {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab.id) {
+      throw new Error('No active tab found');
+    }
+
+    const domFieldId = FIELD_MAPPINGS[fieldKey];
+    await browser.tabs.sendMessage(tab.id, {
+      action: 'updateDOMField',
+      fieldId: domFieldId,
+      value
+    });
+  } catch (error) {
+    console.error(`Error updating DOM field ${fieldKey}:`, error);
+  }
+}

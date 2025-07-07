@@ -2,6 +2,16 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { useMachine } from "@xstate/solid";
 import { storage, type ClientData } from "../../utils/storage";
 import { workflowMachine } from "@/utils/stateMachine";
+import {
+  Autocomplete,
+  PuntoVentaAutocomplete,
+  TipoComprobanteAutocomplete,
+  IdiomaAutocomplete,
+  ConceptoAutocomplete,
+  ActividadAutocomplete,
+  MonedaAutocomplete,
+  CountryAutocomplete,
+} from "./autocompletes";
 
 function App() {
   const [clients, setClients] = createSignal<ClientData[]>([]);
@@ -289,7 +299,7 @@ function App() {
         </p>
       </header>
 
-      <main class="p-4 overflow-y-auto">
+      <main class="p-4">
         <Show when={isLoading()}>
           <div class="text-center py-8">
             <p class="text-sm text-gray-500">Cargando...</p>
@@ -321,7 +331,7 @@ function App() {
             </div>
 
             {/* Step 1: AFIP Form Configuration */}
-            <div class="mb-4 border border-blue-200 rounded-md overflow-hidden">
+            <div class="mb-4 border border-blue-200 rounded-md">
               <div
                 class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(1) ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
               >
@@ -343,22 +353,9 @@ function App() {
                     <label class="block text-xs font-medium text-gray-700 mb-2">
                       Punto de Venta *
                     </label>
-                    <Autocomplete
+                    <PuntoVentaAutocomplete
                       value={stepOne().puntoVenta}
                       onChange={(value) => handleStepOne("puntoVenta", value)}
-                      options={[
-                        {
-                          value: "4",
-                          label:
-                            "00004-San Lorenzo 501 Piso:21 Dpto:B - Barrio Nueva Cordoba, Córdoba",
-                        },
-                        {
-                          value: "2",
-                          label:
-                            "00002-San Lorenzo 501 Piso:21 Dpto:B - Barrio Nueva Cordoba, Córdoba",
-                        },
-                      ]}
-                      placeholder="Seleccionar punto de venta..."
                     />
                   </div>
 
@@ -366,25 +363,12 @@ function App() {
                     <label class="block text-xs font-medium text-gray-700 mb-2">
                       Tipo de Comprobante *
                     </label>
-                    <Autocomplete
+                    <TipoComprobanteAutocomplete
                       value={stepOne().tipoComprobante}
                       onChange={(value) =>
                         handleStepOne("tipoComprobante", value)
                       }
-                      options={[
-                        { value: "39", label: "Factura de Exportación E" },
-                        {
-                          value: "41",
-                          label:
-                            "Nota de Débito por Operaciones con el Exterior E",
-                        },
-                        {
-                          value: "43",
-                          label:
-                            "Nota de Crédito por Operaciones con el Exterior E",
-                        },
-                      ]}
-                      placeholder="Seleccionar tipo de comprobante..."
+                      puntoVentaValue={stepOne().puntoVenta}
                     />
                   </div>
 
@@ -402,7 +386,7 @@ function App() {
             </div>
 
             {/* Step 2: Invoice Configuration */}
-            <div class="mb-4 border border-orange-200 rounded-md overflow-hidden">
+            <div class="mb-4 border border-orange-200 rounded-md">
               <div
                 class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(2) ? "bg-green-100 border-green-200" : "bg-orange-50"}`}
               >
@@ -420,125 +404,97 @@ function App() {
 
               <Show when={!isStepCollapsed(2)}>
                 <div class="p-3 bg-orange-50 border-t border-orange-200">
+                  <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-2">
+                        Idioma
+                      </label>
+                      <IdiomaAutocomplete
+                        value={stepTwo().idioma}
+                        onChange={(value) => handleStepTwo("idioma", value)}
+                      />
+                    </div>
 
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Idioma
-                    </label>
-                    <Autocomplete
-                      value={stepTwo().idioma}
-                      onChange={(value) => handleStepTwo("idioma", value)}
-                      options={[
-                        { value: "1", label: "Español" },
-                        { value: "2", label: "Inglés" },
-                        { value: "3", label: "Portugués" },
-                      ]}
-                      placeholder="Seleccionar idioma..."
-                    />
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-2">
+                        Fecha (DD/MM/YYYY)
+                      </label>
+                      <input
+                        type="text"
+                        value={stepTwo().fechaComprobante}
+                        onInput={(e) =>
+                          handleStepTwo(
+                            "fechaComprobante",
+                            e.currentTarget.value,
+                          )
+                        }
+                        placeholder="01/01/2024"
+                        class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                      />
+                    </div>
                   </div>
 
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Fecha (DD/MM/YYYY)
-                    </label>
-                    <input
-                      type="text"
-                      value={stepTwo().fechaComprobante}
-                      onInput={(e) =>
-                        handleStepTwo("fechaComprobante", e.currentTarget.value)
-                      }
-                      placeholder="01/01/2024"
-                      class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    />
-                  </div>
-                </div>
-
-                <div class="mb-3">
-                  <label class="block text-xs font-medium text-gray-700 mb-2">
-                    Concepto *
-                  </label>
-                  <Autocomplete
-                    value={stepTwo().concepto}
-                    onChange={(value) => handleStepTwo("concepto", value)}
-                    options={[
-                      { value: "1", label: "Exportación definitiva de Bienes" },
-                      { value: "2", label: "Servicios" },
-                      { value: "4", label: "Otros" },
-                    ]}
-                    placeholder="Seleccionar concepto..."
-                  />
-                </div>
-
-                <div class="mb-3">
-                  <label class="block text-xs font-medium text-gray-700 mb-2">
-                    Actividad
-                  </label>
-                  <Autocomplete
-                    value={stepTwo().actividad}
-                    onChange={(v) => handleStepTwo("actividad", v)}
-                    options={[
-                      {
-                        value: "620100",
-                        label: "620100 - SERVICIOS DE CONSULTORES EN INF...",
-                      },
-                    ]}
-                    placeholder="Seleccionar actividad..."
-                  />
-                </div>
-
-                <div class="mb-3">
-                  <label class="flex items-center text-xs font-medium text-gray-700">
-                    <input
-                      type="checkbox"
-                      checked={stepTwo().monedaExtranjera}
-                      onChange={(e) =>
-                        handleStepTwo("monedaExtranjera", e.target.checked)
-                      }
-                      class="mr-2"
-                    />
-                    Moneda Extranjera
-                  </label>
-                </div>
-
-                <Show when={stepTwo().monedaExtranjera}>
                   <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Moneda
+                      Concepto *
                     </label>
-                    <Autocomplete
-                      value={stepTwo().selectedMoneda}
-                      onChange={(value) =>
-                        handleStepTwo("selectedMoneda", value)
-                      }
-                      options={[
-                        { value: "DOL", label: "Dólar Estadounidense" },
-                        { value: "060", label: "Euro" },
-                        { value: "021", label: "Libra Esterlina" },
-                        { value: "019", label: "Yens" },
-                        { value: "012", label: "Real" },
-                        { value: "018", label: "Dólar Canadiense" },
-                        { value: "026", label: "Dólar Australiano" },
-                        { value: "009", label: "Franco Suizo" },
-                      ]}
-                      placeholder="Seleccionar moneda..."
+                    <ConceptoAutocomplete
+                      value={stepTwo().concepto}
+                      onChange={(value) => handleStepTwo("concepto", value)}
                     />
                   </div>
-                </Show>
 
-                <button
-                  class="w-full px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                  onClick={fillStep2AndContinue}
-                  disabled={!stepTwo().concepto}
-                >
-                  Continuar al Paso 3 →
-                </button>
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Actividad
+                    </label>
+                    <ActividadAutocomplete
+                      value={stepTwo().actividad}
+                      onChange={(v) => handleStepTwo("actividad", v)}
+                    />
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="flex items-center text-xs font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={stepTwo().monedaExtranjera}
+                        onChange={(e) =>
+                          handleStepTwo("monedaExtranjera", e.target.checked)
+                        }
+                        class="mr-2"
+                      />
+                      Moneda Extranjera
+                    </label>
+                  </div>
+
+                  <Show when={stepTwo().monedaExtranjera}>
+                    <div class="mb-3">
+                      <label class="block text-xs font-medium text-gray-700 mb-2">
+                        Moneda
+                      </label>
+                      <MonedaAutocomplete
+                        value={stepTwo().selectedMoneda}
+                        onChange={(value) =>
+                          handleStepTwo("selectedMoneda", value)
+                        }
+                      />
+                    </div>
+                  </Show>
+
+                  <button
+                    class="w-full px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={fillStep2AndContinue}
+                    disabled={!stepTwo().concepto}
+                  >
+                    Continuar al Paso 3 →
+                  </button>
                 </div>
               </Show>
             </div>
 
             {/* Step 3: Client Data and Payment Method */}
-            <div class="mb-4 border border-green-200 rounded-md overflow-hidden">
+            <div class="mb-4 border border-green-200 rounded-md">
               <div
                 class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(3) ? "bg-green-100 border-green-200" : "bg-green-50"}`}
               >
@@ -743,33 +699,9 @@ function ClientForm(props: {
         <label class="block text-xs font-medium text-gray-700 mb-1">
           País Destino
         </label>
-        <Autocomplete
+        <CountryAutocomplete
           value={formData().country}
           onChange={(value) => updateField("country", value)}
-          options={[
-            { value: "200", label: "ARGENTINA" },
-            { value: "212", label: "ESTADOS UNIDOS" },
-            { value: "203", label: "BRASIL" },
-            { value: "208", label: "CHILE" },
-            { value: "225", label: "URUGUAY" },
-            { value: "221", label: "PARAGUAY" },
-            { value: "202", label: "BOLIVIA" },
-            { value: "222", label: "PERU" },
-            { value: "205", label: "COLOMBIA" },
-            { value: "226", label: "VENEZUELA" },
-            { value: "210", label: "ECUADOR" },
-            { value: "410", label: "ESPAÑA" },
-            { value: "412", label: "FRANCIA" },
-            { value: "417", label: "ITALIA" },
-            { value: "438", label: "ALEMANIA,REP.FED." },
-            { value: "426", label: "REINO UNIDO" },
-            { value: "204", label: "CANADA" },
-            { value: "218", label: "MEXICO" },
-            { value: "320", label: "JAPON" },
-            { value: "310", label: "CHINA" },
-            { value: "501", label: "AUSTRALIA" },
-          ]}
-          placeholder="Seleccionar país..."
         />
       </div>
 
@@ -789,88 +721,6 @@ function ClientForm(props: {
         </button>
       </div>
     </form>
-  );
-}
-
-// Reusable Autocomplete component
-function Autocomplete(props: {
-  value: string;
-  onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
-  placeholder?: string;
-  allowCustom?: boolean;
-}) {
-  const [isOpen, setIsOpen] = createSignal(false);
-  const [searchTerm, setSearchTerm] = createSignal("");
-
-  const filteredOptions = () => {
-    const term = props.allowCustom ? props.value : searchTerm();
-    if (!term) return props.options;
-    return props.options.filter((option) =>
-      option.label.toLowerCase().includes(term.toLowerCase()),
-    );
-  };
-
-  const selectedOption = () => {
-    return props.options.find((option) => option.value === props.value);
-  };
-
-  const displayValue = () => {
-    if (props.allowCustom) return props.value;
-    return selectedOption()?.label || "";
-  };
-
-  const handleSelect = (option: { value: string; label: string }) => {
-    props.onChange(option.value);
-    setIsOpen(false);
-    setSearchTerm("");
-  };
-
-  return (
-    <div class="relative">
-      {props.allowCustom ? (
-        <input
-          type="text"
-          value={displayValue()}
-          onInput={(e) => props.onChange(e.currentTarget.value)}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-          placeholder={props.placeholder || "Escribir o seleccionar..."}
-          class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
-      ) : (
-        <div
-          class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer bg-white"
-          onClick={() => setIsOpen(!isOpen())}
-        >
-          {displayValue() || props.placeholder || "Seleccionar..."}
-        </div>
-      )}
-
-      <Show when={isOpen()}>
-        <div class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-          {!props.allowCustom && (
-            <input
-              type="text"
-              placeholder="Buscar..."
-              value={searchTerm()}
-              onInput={(e) => setSearchTerm(e.currentTarget.value)}
-              class="w-full px-2 py-1.5 text-xs border-b border-gray-200 focus:outline-none"
-            />
-          )}
-          <For each={filteredOptions()}>
-            {(option) => (
-              <div
-                class="px-2 py-1.5 text-xs hover:bg-blue-50 cursor-pointer"
-                onMouseDown={() => handleSelect(option)}
-              >
-                {option.label}
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
-    </div>
   );
 }
 

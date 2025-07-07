@@ -35,6 +35,9 @@ function initializeAfipHelper() {
       } else if (message.action === 'getSelectOptions') {
         const options = getSelectOptions(message.fieldId);
         sendResponse({ success: true, options });
+      } else if (message.action === 'updateDOMField') {
+        updateDOMField(message.fieldId, message.value);
+        sendResponse({ success: true });
       } else {
         console.log('Unknown action:', message.action);
         sendResponse({ success: false, error: 'Unknown action' });
@@ -367,6 +370,21 @@ function getSelectOptions(fieldId: string): Array<{ value: string; label: string
   
   console.log(`Found ${options.length} options for ${fieldId}:`, options);
   return options;
+}
+
+function updateDOMField(fieldId: string, value: string) {
+  console.log(`Updating DOM field ${fieldId} with value:`, value);
+  
+  const element = document.getElementById(fieldId) as HTMLSelectElement | HTMLInputElement;
+  if (element) {
+    element.value = value;
+    // Trigger change event to ensure form validation and dependent field updates
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    console.log(`Successfully updated DOM field ${fieldId}`);
+  } else {
+    console.warn(`DOM element with ID '${fieldId}' not found`);
+  }
 }
 
 function showNotification(message: string, type: 'success' | 'error' | 'info' = 'success') {
