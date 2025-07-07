@@ -1,123 +1,130 @@
-// AFIP Workflow State Machine - Simplified
+import { createMachine, assign } from "xstate";
 
 export type WorkflowState = "step1" | "step2" | "step3";
 
-export type WorkflowEvent = 
-  | "NEXT_STEP"     // Move to next step
-  | "GO_TO_STEP1"   // Direct navigation to step 1
-  | "GO_TO_STEP2"   // Direct navigation to step 2  
-  | "GO_TO_STEP3"   // Direct navigation to step 3
-  | "RESET";        // Reset to step 1
+export type WorkflowEvent =
+  | { type: "NEXT_STEP" }
+  | { type: "GO_TO_STEP1" }
+  | { type: "GO_TO_STEP2" }
+  | { type: "GO_TO_STEP3" }
+  | { type: "RESET" };
 
-export interface WorkflowContext {
-  currentState: WorkflowState;
-  currentStep: 1 | 2 | 3;
-  canGoToStep: (step: 1 | 2 | 3) => boolean;
-  goToStep: (step: 1 | 2 | 3) => void;
-  nextStep: () => void;
-  reset: () => void;
-  isStepCompleted: (step: 1 | 2 | 3) => boolean;
-  getCompletedSteps: () => Set<1 | 2 | 3>;
+export interface WorkflowMachineContext {
+  completedSteps: Set<1 | 2 | 3>;
 }
 
-export class WorkflowStateMachine implements WorkflowContext {
-  private state: WorkflowState;
-  private completedSteps: Set<1 | 2 | 3> = new Set();
+export const workflowMachine = createMachine({
+  id: "workflow",
+  initial: "step1",
+  context: {
+    completedSteps: new Set<1 | 2 | 3>(),
+  } as WorkflowMachineContext,
+  states: {
+    step1: {
+      on: {
+        NEXT_STEP: {
+          target: "step2",
+          actions: assign({
+            completedSteps: ({ context }) =>
+              new Set([...context.completedSteps, 1 as const]),
+          }),
+        },
+        GO_TO_STEP1: "step1",
+        GO_TO_STEP2: {
+          target: "step2",
+          guard: ({ context }) => context.completedSteps.has(1),
+        },
+        GO_TO_STEP3: {
+          target: "step3",
+          guard: ({ context }) => context.completedSteps.has(2),
+        },
+        RESET: {
+          target: "step1",
+          actions: assign({
+            completedSteps: () => new Set<1 | 2 | 3>(),
+          }),
+        },
+      },
+    },
+    step2: {
+      on: {
+        NEXT_STEP: {
+          target: "step3",
+          actions: assign({
+            completedSteps: ({ context }) =>
+              new Set([...context.completedSteps, 2 as const]),
+          }),
+        },
+        GO_TO_STEP1: "step1",
+        GO_TO_STEP2: "step2",
+        GO_TO_STEP3: {
+          target: "step3",
+          guard: ({ context }) => context.completedSteps.has(2),
+        },
+        RESET: {
+          target: "step1",
+          actions: assign({
+            completedSteps: () => new Set<1 | 2 | 3>(),
+          }),
+        },
+      },
+    },
+    step3: {
+      on: {
+        NEXT_STEP: {
+          actions: assign({
+            completedSteps: ({ context }) =>
+              new Set([...context.completedSteps, 3 as const]),
+          }),
+        },
+        GO_TO_STEP1: "step1",
+        GO_TO_STEP2: {
+          target: "step2",
+          guard: ({ context }) => context.completedSteps.has(1),
+        },
+        GO_TO_STEP3: "step3",
+        RESET: {
+          target: "step1",
+          actions: assign({
+            completedSteps: () => new Set<1 | 2 | 3>(),
+          }),
+        },
+      },
+    },
+  },
+});
 
-  constructor(initialState: WorkflowState = "step1") {
-    this.state = initialState;
+// Helper functions for working with the machine state
+export const getStepFromState = (state: WorkflowState): 1 | 2 | 3 => {
+  switch (state) {
+    case "step1":
+      return 1;
+    case "step2":
+      return 2;
+    case "step3":
+      return 3;
+    default:
+      return 1;
   }
+};
 
-  get currentState(): WorkflowState {
-    return this.state;
-  }
+export const canGoToStep = (
+  step: 1 | 2 | 3,
+  completedSteps: Set<1 | 2 | 3>,
+): boolean => {
+  if (step === 1) return true;
+  if (step === 2) return completedSteps.has(1);
+  if (step === 3) return completedSteps.has(2);
+  return false;
+};
 
-  get currentStep(): 1 | 2 | 3 {
-    switch (this.state) {
-      case "step1": return 1;
-      case "step2": return 2;
-      case "step3": return 3;
-      default: return 1;
-    }
-  }
-
-  canGoToStep(step: 1 | 2 | 3): boolean {
-    // Can always go to step 1
-    if (step === 1) return true;
-    // Can go to step 2 if step 1 is completed
-    if (step === 2) return this.completedSteps.has(1);
-    // Can go to step 3 if step 2 is completed
-    if (step === 3) return this.completedSteps.has(2);
-    return false;
-  }
-
-  goToStep(step: 1 | 2 | 3): void {
-    if (this.canGoToStep(step)) {
-      this.state = `step${step}` as WorkflowState;
-    }
-  }
-
-  nextStep(): void {
-    // Mark current step as completed
-    this.completedSteps.add(this.currentStep);
-    
-    // Move to next step if possible
-    const nextStepNum = (this.currentStep + 1) as 1 | 2 | 3;
-    if (nextStepNum <= 3) {
-      this.goToStep(nextStepNum);
-    }
-  }
-
-  reset(): void {
-    this.state = "step1";
-    this.completedSteps.clear();
-  }
-
-  isStepCompleted(step: 1 | 2 | 3): boolean {
-    return this.completedSteps.has(step);
-  }
-
-  getCompletedSteps(): Set<1 | 2 | 3> {
-    return new Set(this.completedSteps);
-  }
-
-  // Simple collapse logic: step is collapsed if it's not the current step
-  isStepCollapsed(step: 1 | 2 | 3): boolean {
-    return this.currentStep !== step;
-  }
-
-  getStepStatus(step: 1 | 2 | 3): "pending" | "active" | "completed" | "available" {
-    if (this.isStepCompleted(step)) return "completed";
-    if (this.currentStep === step) return "active";
-    if (this.canGoToStep(step)) return "available";
-    return "pending";
-  }
-
-  // Serialization for persistence
-  serialize(): { state: WorkflowState; completed: number[] } {
-    return {
-      state: this.state,
-      completed: Array.from(this.completedSteps)
-    };
-  }
-
-  // Deserialization from persistence
-  static deserialize(data: { 
-    state: WorkflowState; 
-    completed?: number[] 
-  }): WorkflowStateMachine {
-    const machine = new WorkflowStateMachine(data.state);
-    if (data.completed) {
-      machine.completedSteps = new Set(data.completed as (1 | 2 | 3)[]);
-    }
-    return machine;
-  }
-}
-
-// Helper function to create a new state machine
-export function createWorkflowStateMachine(
-  initialState?: WorkflowState,
-): WorkflowStateMachine {
-  return new WorkflowStateMachine(initialState);
-}
-
+export const getStepStatus = (
+  step: 1 | 2 | 3,
+  currentState: WorkflowState,
+  completedSteps: Set<1 | 2 | 3>,
+): "pending" | "active" | "completed" | "available" => {
+  if (completedSteps.has(step)) return "completed";
+  if (getStepFromState(currentState) === step) return "active";
+  if (canGoToStep(step, completedSteps)) return "available";
+  return "pending";
+};

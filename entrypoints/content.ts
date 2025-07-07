@@ -72,12 +72,16 @@ function createFloatingButton() {
   
   button.addEventListener('click', async () => {
     try {
-      // Send message to background script to open popup
-      await browser.runtime.sendMessage({ action: 'openPopup' });
+      // Send message to background script to open sidebar/sidepanel
+      const response = await browser.runtime.sendMessage({ command: 'openSidebar' });
+      if (response?.success) {
+        showNotification('Panel lateral abierto ✓', 'success');
+      } else {
+        showNotification('Error al abrir panel: ' + (response?.error || 'Unknown error'), 'error');
+      }
     } catch (error) {
-      console.error('Error requesting popup:', error);
-      // Fallback: Show notification only if there's an actual error
-      showNotification('Haz clic en el ícono 🇦🇷 en la barra de herramientas para abrir AFIP Helper', 'error');
+      console.error('Error requesting sidebar:', error);
+      showNotification('Error al abrir panel lateral', 'error');
     }
   });
   
@@ -334,14 +338,15 @@ function extractFormData() {
   };
 }
 
-function showNotification(message: string, type: 'success' | 'error' = 'success') {
+function showNotification(message: string, type: 'success' | 'error' | 'info' = 'success') {
   const notification = document.createElement('div');
+  const bgColor = type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3';
   notification.style.cssText = `
     position: fixed;
     top: 80px;
     right: 20px;
     padding: 12px 20px;
-    background: ${type === 'success' ? '#4CAF50' : '#f44336'};
+    background: ${bgColor};
     color: white;
     border-radius: 4px;
     z-index: 10001;

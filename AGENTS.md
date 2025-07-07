@@ -15,6 +15,7 @@
 - **Language**: TypeScript with strict mode
 - **Package Manager**: Bun (not npm/yarn)
 - **Linting/Formatting**: Biome for consistent code style
+- **State Management**: XState for complex state machines, SolidJS signals for simple state
 - **Imports**: Use `@/` for asset imports, relative paths for local modules
 - **Components**: Use SolidJS patterns with `createSignal()` for state
 - **Naming**: camelCase for variables/functions, PascalCase for components
@@ -27,3 +28,4 @@
 - Entry points go in `entrypoints/` directory
 - Assets in `assets/` and `public/` directories
 - Configure browser permissions in `wxt.config.ts`
+- **UI Architecture**: Uses Chrome sidepanel for main interface (click extension icon to open)

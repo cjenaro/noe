@@ -15,7 +15,9 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "solid-js": "^1.9.6"
+    "@xstate/solid": "^2.0.0",
+    "solid-js": "^1.9.6",
+    "xstate": "^5.20.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.6",

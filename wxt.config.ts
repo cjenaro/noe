@@ -8,7 +8,7 @@ export default defineConfig({
     plugins: [tailwindcss()],
   }),
   manifest: {
-    permissions: ['storage', 'activeTab'],
+    permissions: ['storage', 'activeTab', 'sidePanel'],
     host_permissions: ['*://fe.afip.gob.ar/*'],
     name: 'AFIP Invoice Helper',
     description: 'Automate and streamline AFIP electronic invoice creation with saved client data and templates',
@@ -16,8 +16,15 @@ export default defineConfig({
       extension_pages: "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline';"
     },
     action: {
-      default_popup: 'popup.html',
       default_title: 'AFIP Invoice Helper'
+    },
+    side_panel: {
+      default_path: 'sidepanel.html'
+    },
+    // Firefox-specific sidebar configuration
+    sidebar_action: {
+      default_title: 'AFIP Invoice Helper',
+      default_panel: 'sidepanel.html'
     }
   },
 });

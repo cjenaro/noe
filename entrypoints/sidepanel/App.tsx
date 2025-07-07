@@ -1,6 +1,7 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
+import { useMachine } from "@xstate/solid";
 import { storage, type ClientData } from "../../utils/storage";
-import { WorkflowStateMachine } from "@/utils/stateMachine";
+import { workflowMachine } from "@/utils/stateMachine";
 
 function App() {
   const [clients, setClients] = createSignal<ClientData[]>([]);
@@ -29,7 +30,29 @@ function App() {
     selectedMoneda: "",
   });
 
-  const [machine, setMachine] = createSignal(new WorkflowStateMachine("step1"));
+  const [state, send] = useMachine(workflowMachine);
+
+  // Helper functions to maintain the same interface
+  const getCurrentStep = (): 1 | 2 | 3 => {
+    switch (state.value) {
+      case "step1":
+        return 1;
+      case "step2":
+        return 2;
+      case "step3":
+        return 3;
+      default:
+        return 1;
+    }
+  };
+
+  const isStepCollapsed = (step: 1 | 2 | 3): boolean => {
+    return getCurrentStep() !== step;
+  };
+
+  const nextStep = () => {
+    send({ type: "NEXT_STEP" });
+  };
 
   // Load data on mount
   createEffect(async () => {
@@ -92,11 +115,9 @@ function App() {
         },
       });
 
-      console.log("Content script response:", response);
-
       if (response?.success) {
         showNotification("Paso 1 completado ✓", "success");
-        machine().nextStep();
+        nextStep();
       } else {
         throw new Error(
           response?.error || "Error desconocido del content script",
@@ -213,7 +234,7 @@ function App() {
 
       if (response?.success) {
         showNotification("Paso 2 completado ✓", "success");
-        machine().nextStep();
+        nextStep();
       } else {
         throw new Error(
           response?.error || "Error desconocido del content script",
@@ -260,7 +281,7 @@ function App() {
   }
 
   return (
-    <div class="w-96 min-h-[500px] max-h-[600px] bg-gray-50 font-sans box-border">
+    <div class="w-full min-h-screen bg-gray-50 font-sans box-border">
       <header class="bg-blue-600 text-white p-4 text-center">
         <h1 class="text-lg font-semibold mb-1">🇦🇷 AFIP Helper</h1>
         <p class="text-xs opacity-90">
@@ -268,7 +289,7 @@ function App() {
         </p>
       </header>
 
-      <main class="p-4 max-h-96 overflow-y-auto">
+      <main class="p-4 overflow-y-auto">
         <Show when={isLoading()}>
           <div class="text-center py-8">
             <p class="text-sm text-gray-500">Cargando...</p>
@@ -302,23 +323,21 @@ function App() {
             {/* Step 1: AFIP Form Configuration */}
             <div class="mb-4 border border-blue-200 rounded-md overflow-hidden">
               <div
-                class={`p-3 cursor-pointer transition-colors ${machine().isStepCollapsed(1) ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
+                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(1) ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
               >
                 <h3
-                  class={`text-sm font-medium flex items-center justify-between ${machine().isStepCollapsed(1) ? "text-green-900" : "text-blue-900"}`}
+                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(1) ? "text-green-900" : "text-blue-900"}`}
                 >
                   <span>
-                    {machine().isStepCollapsed(1)
+                    {isStepCollapsed(1)
                       ? "✅ Paso 1: Completado"
                       : "📋 Paso 1: Configuración AFIP"}
                   </span>
-                  <span class="text-xs">
-                    {machine().isStepCollapsed(1) ? "▲" : "▼"}
-                  </span>
+                  <span class="text-xs">{isStepCollapsed(1) ? "▲" : "▼"}</span>
                 </h3>
               </div>
 
-              <Show when={!machine().isStepCollapsed(1)}>
+              <Show when={!isStepCollapsed(1)}>
                 <div class="p-3 bg-blue-50 border-t border-blue-200">
                   <div class="mb-3">
                     <label class="block text-xs font-medium text-gray-700 mb-2">
@@ -383,11 +402,24 @@ function App() {
             </div>
 
             {/* Step 2: Invoice Configuration */}
-            <Show when={machine().isStepCollapsed(2)}>
-              <div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
-                <h3 class="text-sm font-medium text-orange-900 mb-3">
-                  ⚙️ Paso 2: Configuración de Factura
+            <div class="mb-4 border border-orange-200 rounded-md overflow-hidden">
+              <div
+                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(2) ? "bg-green-100 border-green-200" : "bg-orange-50"}`}
+              >
+                <h3
+                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(2) ? "text-green-900" : "text-orange-900"}`}
+                >
+                  <span>
+                    {isStepCollapsed(2)
+                      ? "✅ Paso 2: Completado"
+                      : "⚙️ Paso 2: Configuración de Factura"}
+                  </span>
+                  <span class="text-xs">{isStepCollapsed(2) ? "▲" : "▼"}</span>
                 </h3>
+              </div>
+
+              <Show when={!isStepCollapsed(2)}>
+                <div class="p-3 bg-orange-50 border-t border-orange-200">
 
                 <div class="grid grid-cols-2 gap-3 mb-3">
                   <div>
@@ -501,48 +533,62 @@ function App() {
                 >
                   Continuar al Paso 3 →
                 </button>
-              </div>
-            </Show>
+                </div>
+              </Show>
+            </div>
 
             {/* Step 3: Client Data and Payment Method */}
-            <Show when={machine().isStepCollapsed(3)}>
-              <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                <h3 class="text-sm font-medium text-green-900 mb-3">
-                  👥 Paso 3: Datos del Cliente
+            <div class="mb-4 border border-green-200 rounded-md overflow-hidden">
+              <div
+                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(3) ? "bg-green-100 border-green-200" : "bg-green-50"}`}
+              >
+                <h3
+                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(3) ? "text-green-900" : "text-green-900"}`}
+                >
+                  <span>
+                    {isStepCollapsed(3)
+                      ? "✅ Paso 3: Completado"
+                      : "👥 Paso 3: Datos del Cliente"}
+                  </span>
+                  <span class="text-xs">{isStepCollapsed(3) ? "▲" : "▼"}</span>
                 </h3>
-
-                <div class="mb-3">
-                  <label class="block text-xs font-medium text-gray-700 mb-2">
-                    Forma de Pago (opcional)
-                  </label>
-                  <Autocomplete
-                    value={stepThree().paymentMethod}
-                    onChange={(v) => handleStepThree("paymentMethod", v)}
-                    options={[
-                      "A percibir en USDT",
-                      "A percibir en BTC",
-                      "A percibir en ETH",
-                      "A percibir en USDC",
-                      "A percibir en DAI",
-                      "A percibir en ARS",
-                      "A percibir en USD",
-                      "A percibir en EUR",
-                      "Transferencia bancaria",
-                      "Efectivo",
-                      "Cheque",
-                      "Tarjeta de crédito",
-                      "Tarjeta de débito",
-                      "Mercado Pago",
-                      "PayPal",
-                      "Western Union",
-                      "MoneyGram",
-                    ].map((method) => ({ value: method, label: method }))}
-                    placeholder="Escribir o seleccionar forma de pago..."
-                    allowCustom={true}
-                  />
-                </div>
               </div>
-            </Show>
+
+              <Show when={!isStepCollapsed(3)}>
+                <div class="p-3 bg-green-50 border-t border-green-200">
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Forma de Pago (opcional)
+                    </label>
+                    <Autocomplete
+                      value={stepThree().paymentMethod}
+                      onChange={(v) => handleStepThree("paymentMethod", v)}
+                      options={[
+                        "A percibir en USDT",
+                        "A percibir en BTC",
+                        "A percibir en ETH",
+                        "A percibir en USDC",
+                        "A percibir en DAI",
+                        "A percibir en ARS",
+                        "A percibir en USD",
+                        "A percibir en EUR",
+                        "Transferencia bancaria",
+                        "Efectivo",
+                        "Cheque",
+                        "Tarjeta de crédito",
+                        "Tarjeta de débito",
+                        "Mercado Pago",
+                        "PayPal",
+                        "Western Union",
+                        "MoneyGram",
+                      ].map((method) => ({ value: method, label: method }))}
+                      placeholder="Escribir o seleccionar forma de pago..."
+                      allowCustom={true}
+                    />
+                  </div>
+                </div>
+              </Show>
+            </div>
 
             <Show when={showForm()}>
               <ClientForm
@@ -555,9 +601,9 @@ function App() {
               />
             </Show>
 
-            <div class="space-y-2 max-h-72 overflow-y-auto">
+            <div class="space-y-2">
               <button
-                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors"
+                class="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors ml-auto block"
                 onClick={() => {
                   setEditingClient(null);
                   setShowForm(true);
