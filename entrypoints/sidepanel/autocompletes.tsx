@@ -1,5 +1,6 @@
 import { createSignal, createEffect, For, Show } from "solid-js";
 import { fetchFieldOptions, updateDOMField, type FieldKey, type SelectOption } from "../../utils/domOptions";
+import { storage, type ClientData } from "../../utils/storage";
 
 // Generic Autocomplete component
 export function Autocomplete(props: {
@@ -278,6 +279,51 @@ export function CountryAutocomplete(props: {
       value={props.value}
       onChange={props.onChange}
       placeholder={props.placeholder || "Seleccionar país..."}
+    />
+  );
+}
+
+// Client autocomplete component that uses stored clients
+export function ClientAutocomplete(props: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const [clients, setClients] = createSignal<ClientData[]>([]);
+  const [isLoading, setIsLoading] = createSignal(false);
+
+  const fetchClients = async () => {
+    setIsLoading(true);
+    try {
+      const clientsData = await storage.getClients();
+      setClients(clientsData);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+      setClients([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOpen = () => {
+    fetchClients();
+  };
+
+  const clientOptions = () => {
+    return clients().map(client => ({
+      value: client.id,
+      label: `${client.companyName} (${client.cuit})`
+    }));
+  };
+
+  return (
+    <Autocomplete
+      value={props.value}
+      onChange={props.onChange}
+      options={clientOptions()}
+      placeholder={props.placeholder || "Seleccionar cliente..."}
+      onOpen={handleOpen}
+      isLoading={isLoading()}
     />
   );
 }

@@ -11,6 +11,7 @@ import {
   ActividadAutocomplete,
   MonedaAutocomplete,
   CountryAutocomplete,
+  ClientAutocomplete,
 } from "./autocompletes";
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
 
   const [stepThree, setStepThree] = createSignal({
     paymentMethod: "",
+    client: "",
   });
 
   // Step 2 fields
@@ -80,13 +82,13 @@ function App() {
   // Listen for step sync messages from content script
   createEffect(() => {
     const handleMessage = (message: any) => {
-      if (message.action === 'syncStep') {
+      if (message.action === "syncStep") {
         console.log(`Syncing to step ${message.step} from URL: ${message.url}`);
-        
+
         // Update state machine to match the current step
         const targetStep = message.step;
         const currentStep = getCurrentStep();
-        
+
         if (targetStep !== currentStep) {
           // Navigate to the correct step
           if (targetStep === 1 && currentStep !== 1) {
@@ -114,27 +116,6 @@ function App() {
       browser.runtime.onMessage.removeListener(handleMessage);
     };
   });
-
-  async function fillForm(client: ClientData) {
-    try {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (tab.id) {
-        await browser.tabs.sendMessage(tab.id, {
-          action: "fillForm",
-          data: {
-            ...client,
-            puntoVenta: stepOne().puntoVenta,
-            tipoComprobante: stepOne().tipoComprobante,
-          },
-        });
-      }
-    } catch (error) {
-      console.error("Error filling form:", error);
-    }
-  }
 
   async function fillStep1AndContinue() {
     try {
@@ -521,7 +502,7 @@ function App() {
                   </Show>
 
                   <button
-                    class="w-full px-3 py-2 bg-orange-600 text-white text-sm font-medium rounded hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                     onClick={fillStep2AndContinue}
                     disabled={!stepTwo().concepto}
                   >
@@ -580,6 +561,22 @@ function App() {
                       allowCustom={true}
                     />
                   </div>
+                  <div class="mb-3">
+                    <label class="block text-xs font-medium text-gray-700 mb-2">
+                      Cliente
+                    </label>
+                    <ClientAutocomplete
+                      value={stepThree().client}
+                      onChange={(v) => handleStepThree("client", v)}
+                    />
+                  </div>
+                  <button
+                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    onClick={fillStep3AndContinue}
+                    disabled={!stepThree().client || !stepThree().paymentMethod}
+                  >
+                    Continuar al Paso 4 →
+                  </button>
                 </div>
               </Show>
             </div>
@@ -616,12 +613,6 @@ function App() {
                       <p class="text-xs text-gray-500">{client.email}</p>
                     </div>
                     <div class="flex gap-1">
-                      <button
-                        class="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors"
-                        onClick={() => fillForm(client)}
-                      >
-                        Usar
-                      </button>
                       <button
                         class="px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700 transition-colors"
                         onClick={() => {
