@@ -110,11 +110,7 @@ function initializeAfipHelper() {
         const options = getSelectOptions(message.fieldId);
         sendResponse({ success: true, options });
       } else if (message.action === "updateDOMField") {
-        if (message.lineNumber && message.field) {
-          updateLineItemField(message.lineNumber, message.field, message.value);
-        } else {
-          updateDOMField(message.fieldId, message.value);
-        }
+        updateDOMField(message.fieldId, message.value);
         sendResponse({ success: true });
       } else if (message.action === "fillFinalStep") {
         fillFinalStep(message.data)
@@ -573,7 +569,13 @@ async function fillFinalStep(data: any) {
 
   // First, ensure we have enough lines in the DOM by clicking "Agregar línea descripción"
   // Count existing lines in DOM using table rows
-  const existingRows = getLineItemRows();
+  const table = document.getElementById("idoperacion") as HTMLTableElement;
+  if (!table) {
+    console.warn("Could not find table with id 'idoperacion'");
+    return;
+  }
+
+  const existingRows = getLineItemRows(table);
   const existingLines = existingRows.length;
 
   console.log(
@@ -717,59 +719,6 @@ async function fillFinalStep(data: any) {
   }, 1500); // Increased timeout to allow for calculations
 }
 
-function updateLineItemField(lineNumber: number, field: string, value: string) {
-  console.log(`Updating line ${lineNumber} field ${field} with value:`, value);
-
-  // Map field names to DOM field IDs
-  const fieldMapping: { [key: string]: string } = {
-    itemCode: `detalle_codigo_articulo${lineNumber}`,
-    itemDescription: `detalle_descripcion${lineNumber}`,
-    quantity: `detalle_cantidad${lineNumber}`,
-    unitOfMeasure: `detalle_medida${lineNumber}`,
-    unitPrice: `detalle_precio${lineNumber}`,
-    bonusAmount: `detalle_importe_bonificacion${lineNumber}`,
-  };
-
-  const fieldId = fieldMapping[field];
-  if (!fieldId) {
-    console.warn(`Unknown field: ${field}`);
-    return;
-  }
-
-  const element = document.getElementById(fieldId) as
-    | HTMLInputElement
-    | HTMLSelectElement
-    | HTMLTextAreaElement;
-
-  if (element) {
-    // Temporarily remove sync listener to avoid infinite loop
-    const hadListener = element.hasAttribute("data-sync-listener");
-    if (hadListener) {
-      element.removeAttribute("data-sync-listener");
-    }
-
-    element.value = value;
-
-    // Trigger change event to ensure form validation and dependent field updates
-    element.dispatchEvent(new Event("change", { bubbles: true }));
-    element.dispatchEvent(new Event("input", { bubbles: true }));
-
-    // For quantity and price fields, trigger keyup to recalculate subtotal
-    if (field === "quantity" || field === "unitPrice") {
-      element.dispatchEvent(new Event("keyup", { bubbles: true }));
-    }
-
-    // Restore sync listener
-    if (hadListener) {
-      element.setAttribute("data-sync-listener", "true");
-    }
-
-    console.log(`Successfully updated line ${lineNumber} field ${field}`);
-  } else {
-    console.warn(`DOM element with ID '${fieldId}' not found`);
-  }
-}
-
 function updateDOMField(fieldId: string, value: string) {
   console.log(`Updating DOM field ${fieldId} with value:`, value);
 
@@ -787,13 +736,7 @@ function updateDOMField(fieldId: string, value: string) {
   }
 }
 
-function getLineItemRows(): HTMLTableRowElement[] {
-  const table = document.getElementById("idoperacion") as HTMLTableElement;
-  if (!table) {
-    console.warn("Could not find table with id 'idoperacion'");
-    return [];
-  }
-
+function getLineItemRows(table: HTMLTableElement): HTMLTableRowElement[] {
   const tbody = table.querySelector("tbody");
   if (!tbody) {
     console.warn("Could not find tbody in table");
@@ -852,9 +795,15 @@ function initializeLineItemTracking() {
     return;
   }
 
+  const table = document.getElementById("idoperacion") as HTMLTableElement;
+  if (!table) {
+    console.warn("Could not find table with id 'idoperacion'");
+    return;
+  }
+
   const syncLineItemsStructure = () => {
-    const rows = getLineItemRows();
-    const lineItems = rows.map(getLineItemData);
+    const rows = getLineItemRows(table);
+    const lineItems = rows.map(getLineItemData).filter(Boolean);
 
     console.log(`Found ${lineItems.length} line items in DOM:`, lineItems);
 
@@ -876,15 +825,12 @@ function initializeLineItemTracking() {
 
   // Use MutationObserver to detect when new elements are added
   const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (mutation.type === "childList") {
-        syncLineItemsStructure();
-      }
-    });
+    if (mutations.some((mutation) => mutation.type === "childList"))
+      syncLineItemsStructure();
   });
 
   // Start observing
-  observer.observe(document.body, {
+  observer.observe(table, {
     childList: true,
     subtree: true,
   });

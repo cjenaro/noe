@@ -16,56 +16,20 @@ interface StepFourProps {
     lineItems: LineItem[];
     otherData: string;
   };
-  onFieldChange: (key: keyof StepFourProps["stepData"], value: string | LineItem[]) => void;
+  onFieldChange: (
+    key: keyof StepFourProps["stepData"],
+    value: string | LineItem[],
+  ) => void;
   onContinue: () => void;
 }
 
 export function StepFour(props: StepFourProps) {
-  // Ensure we always have at least one line item
-  if (props.stepData.lineItems.length === 0) {
-    props.onFieldChange("lineItems", [{
-      lineNumber: 1,
-      itemCode: "",
-      itemDescription: "",
-      quantity: "1",
-      unitOfMeasure: "7",
-      unitPrice: "",
-      bonusAmount: "",
-    }]);
-  }
-
-  const updateLineItem = (index: number, field: keyof LineItem, value: string) => {
+  function updateLineItem(index: number, field: keyof LineItem, value: string) {
     const newLineItems = [...props.stepData.lineItems];
     const lineItem = newLineItems[index];
     newLineItems[index] = { ...lineItem, [field]: value };
     props.onFieldChange("lineItems", newLineItems);
-    
-    // Sync change to DOM if we're on step 4
-    if (field !== 'lineNumber') {
-      syncFieldToDOM(lineItem.lineNumber, field, value);
-    }
-  };
-
-  const syncFieldToDOM = async (lineNumber: number, field: keyof LineItem, value: string) => {
-    try {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      if (!tab.id) return;
-      if (!tab.url?.includes("fe.afip.gob.ar")) return;
-
-      await browser.tabs.sendMessage(tab.id, {
-        action: "updateDOMField",
-        lineNumber: lineNumber,
-        field: field,
-        value: value,
-      });
-    } catch (error) {
-      console.log("Could not sync field to DOM:", error);
-    }
-  };
+  }
 
   const syncOtherDataToDOM = async (value: string) => {
     try {
@@ -88,8 +52,12 @@ export function StepFour(props: StepFourProps) {
   };
 
   const hasValidLineItems = () => {
-    return props.stepData.lineItems.length > 0 && 
-           props.stepData.lineItems.some(item => item.itemDescription.trim() !== "");
+    return (
+      props.stepData.lineItems.length > 0 &&
+      props.stepData.lineItems.some(
+        (item) => item.itemDescription.trim() !== "",
+      )
+    );
   };
 
   return (
@@ -113,9 +81,12 @@ export function StepFour(props: StepFourProps) {
         <div class="p-3 bg-purple-50 border-t border-purple-200">
           <div class="mb-4">
             <div class="mb-3">
-              <h4 class="text-sm font-medium text-gray-700">Items de la Factura</h4>
+              <h4 class="text-sm font-medium text-gray-700">
+                Items de la Factura
+              </h4>
               <p class="text-xs text-gray-500 mt-1">
-                Use los botones "Agregar línea descripción" y "X" en la página de AFIP para gestionar las líneas
+                Use los botones "Agregar línea descripción" y "X" en la página
+                de AFIP para gestionar las líneas
               </p>
             </div>
 
@@ -123,7 +94,9 @@ export function StepFour(props: StepFourProps) {
               {(item, index) => (
                 <div class="mb-4 p-3 bg-white border border-gray-200 rounded">
                   <div class="mb-2">
-                    <h5 class="text-xs font-medium text-gray-600">Línea {item.lineNumber}</h5>
+                    <h5 class="text-xs font-medium text-gray-600">
+                      Línea {item.lineNumber}
+                    </h5>
                   </div>
 
                   <div class="grid grid-cols-2 gap-2 mb-2">
@@ -135,7 +108,11 @@ export function StepFour(props: StepFourProps) {
                         type="text"
                         value={item.itemCode}
                         onInput={(e) =>
-                          updateLineItem(index(), "itemCode", e.currentTarget.value)
+                          updateLineItem(
+                            index(),
+                            "itemCode",
+                            e.currentTarget.value,
+                          )
                         }
                         placeholder="Código..."
                         class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -150,7 +127,11 @@ export function StepFour(props: StepFourProps) {
                         type="text"
                         value={item.quantity}
                         onInput={(e) =>
-                          updateLineItem(index(), "quantity", e.currentTarget.value)
+                          updateLineItem(
+                            index(),
+                            "quantity",
+                            e.currentTarget.value,
+                          )
                         }
                         placeholder="1"
                         class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -165,7 +146,11 @@ export function StepFour(props: StepFourProps) {
                     <textarea
                       value={item.itemDescription}
                       onInput={(e) =>
-                        updateLineItem(index(), "itemDescription", e.currentTarget.value)
+                        updateLineItem(
+                          index(),
+                          "itemDescription",
+                          e.currentTarget.value,
+                        )
                       }
                       placeholder="Descripción del servicio o producto..."
                       class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -182,7 +167,11 @@ export function StepFour(props: StepFourProps) {
                         type="text"
                         value={item.unitPrice}
                         onInput={(e) =>
-                          updateLineItem(index(), "unitPrice", e.currentTarget.value)
+                          updateLineItem(
+                            index(),
+                            "unitPrice",
+                            e.currentTarget.value,
+                          )
                         }
                         placeholder="0.00"
                         class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -197,7 +186,11 @@ export function StepFour(props: StepFourProps) {
                         type="text"
                         value={item.bonusAmount}
                         onInput={(e) =>
-                          updateLineItem(index(), "bonusAmount", e.currentTarget.value)
+                          updateLineItem(
+                            index(),
+                            "bonusAmount",
+                            e.currentTarget.value,
+                          )
                         }
                         placeholder="0.00"
                         class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
@@ -238,3 +231,4 @@ export function StepFour(props: StepFourProps) {
     </div>
   );
 }
+

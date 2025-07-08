@@ -103,7 +103,6 @@ function App() {
           send({ type: "GO_TO_STEP" + targetStep });
         }
       } else if (message.action === "syncLineItemsStructure") {
-        console.log("new line items:", message.lineItems);
         setStepFour((prev) => ({
           ...prev,
           lineItems: message.lineItems || [],
