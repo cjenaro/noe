@@ -86,6 +86,9 @@ function syncStepWithSidepanel() {
 function initializeAfipHelper() {
   console.log("AFIP helper initializing message listeners...");
 
+  // Initialize line item tracking for step 4
+  initializeLineItemTracking();
+
   // Listen for messages from popup
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     console.log("Content script received message:", message);
@@ -107,11 +110,21 @@ function initializeAfipHelper() {
         const options = getSelectOptions(message.fieldId);
         sendResponse({ success: true, options });
       } else if (message.action === "updateDOMField") {
-        updateDOMField(message.fieldId, message.value);
+        if (message.lineNumber && message.field) {
+          updateLineItemField(message.lineNumber, message.field, message.value);
+        } else {
+          updateDOMField(message.fieldId, message.value);
+        }
         sendResponse({ success: true });
       } else if (message.action === "fillFinalStep") {
-        fillFinalStep(message.data);
-        sendResponse({ success: true });
+        fillFinalStep(message.data)
+          .then(() => {
+            sendResponse({ success: true });
+          })
+          .catch((error) => {
+            console.error("Error in fillFinalStep:", error);
+            sendResponse({ success: false, error: error.message });
+          });
       } else {
         console.log("Unknown action:", message.action);
         sendResponse({ success: false, error: "Unknown action" });
@@ -440,14 +453,14 @@ function fillStep3AndContinue(data: any) {
     ...firstStepFields,
     ...secondStepFields,
   }).filter(Boolean).length;
-  
+
   // Wait a moment for any async validation, then click continue button
   setTimeout(() => {
     console.log("Looking for continue button...");
     console.log("Current page URL:", window.location.href);
     console.log(
       "All buttons on page:",
-      Array.from(document.querySelectorAll("input[type=\"button\"], button")).map(
+      Array.from(document.querySelectorAll('input[type="button"], button')).map(
         (btn) => ({
           tagName: btn.tagName,
           type: btn.getAttribute("type"),
@@ -548,66 +561,213 @@ function getSelectOptions(
   return options;
 }
 
-function fillFinalStep(data: any) {
+async function fillFinalStep(data: any) {
   console.log("fillFinalStep called with data:", data);
-
-  // Final step fields - item details
-  const finalStepFields = {
-    detalle_codigo_articulo1: data.itemCode || "",
-    detalle_descripcion1: data.itemDescription || "",
-    detalle_cantidad1: data.quantity || "1",
-    detalle_medida1: data.unitOfMeasure || "7", // Default to "unidades"
-    detalle_precio1: data.unitPrice || "",
-    detalle_importe_bonificacion1: data.bonusAmount || "",
-    otrosdatosgenerales: data.otherData || "",
-  };
 
   let filledCount = 0;
   let errors: string[] = [];
 
-  // Fill final step fields
-  Object.entries(finalStepFields).forEach(([fieldId, value]) => {
-    console.log(`Trying to fill field ${fieldId} with value:`, value);
-    if (value !== undefined && value !== "") {
-      const element = document.getElementById(fieldId) as
-        | HTMLInputElement
-        | HTMLSelectElement
-        | HTMLTextAreaElement;
-      if (element) {
-        console.log(`Found element ${fieldId}, setting value...`);
+  // Handle line items array
+  const lineItems: any[] = data.lineItems || [];
+  console.log(`Processing ${lineItems.length} line items`);
 
-        // Handle textarea for "Otros Datos" - need to enable editing first
-        if (fieldId === "otrosdatosgenerales") {
-          element.className = "";
-          (element as HTMLTextAreaElement).readOnly = false;
-        }
+  // First, ensure we have enough lines in the DOM by clicking "Agregar línea descripción"
+  // Count existing lines in DOM using table rows
+  const existingRows = getLineItemRows();
+  const existingLines = existingRows.length;
 
-        element.value = value;
+  console.log(
+    `Found ${existingLines} existing lines, need ${lineItems.length} lines`,
+  );
 
-        // Trigger change event to ensure form validation and calculations
-        element.dispatchEvent(new Event("change", { bubbles: true }));
-        element.dispatchEvent(new Event("input", { bubbles: true }));
+  // Add more lines if needed
+  for (let i = existingLines; i < lineItems.length; i++) {
+    console.log(`Adding line item ${i + 1}`);
 
-        // For quantity and price fields, trigger keyup to recalculate subtotal
-        if (fieldId.includes("cantidad") || fieldId.includes("precio")) {
-          element.dispatchEvent(new Event("keyup", { bubbles: true }));
-        }
+    // Find and click the "Agregar línea descripción" button
+    const addLineButton = document.querySelector(
+      'input[type="button"][value="Agregar línea descripción"]',
+    ) as HTMLInputElement;
+    if (addLineButton) {
+      console.log("Clicking 'Agregar línea descripción' button");
+      addLineButton.click();
 
-        filledCount++;
-        console.log(`Successfully filled ${fieldId}`);
-      } else {
-        const error = `Element with ID '${fieldId}' not found`;
-        console.error(error);
-        errors.push(error);
-      }
+      // Wait a bit for the new row to be added
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    } else {
+      console.warn("Could not find 'Agregar línea descripción' button");
+      break;
     }
+  }
+
+  // Now fill each line item that exists in our data
+  lineItems.forEach((item: any) => {
+    const lineNumber = item.lineNumber || 1;
+    console.log(`Filling line item ${lineNumber}:`, item);
+
+    const lineFields = {
+      [`detalle_codigo_articulo${lineNumber}`]: item.itemCode || "",
+      [`detalle_descripcion${lineNumber}`]: item.itemDescription || "",
+      [`detalle_cantidad${lineNumber}`]: item.quantity || "1",
+      [`detalle_medida${lineNumber}`]: item.unitOfMeasure || "7",
+      [`detalle_precio${lineNumber}`]: item.unitPrice || "",
+      [`detalle_importe_bonificacion${lineNumber}`]: item.bonusAmount || "",
+    };
+
+    Object.entries(lineFields).forEach(([fieldId, value]) => {
+      console.log(`Trying to fill field ${fieldId} with value:`, value);
+      if (value !== undefined && value !== "") {
+        const element = document.getElementById(fieldId) as
+          | HTMLInputElement
+          | HTMLSelectElement
+          | HTMLTextAreaElement;
+        if (element) {
+          console.log(`Found element ${fieldId}, setting value...`);
+          element.value = value;
+
+          // Trigger change event to ensure form validation and calculations
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+
+          // For quantity and price fields, trigger keyup to recalculate subtotal
+          if (fieldId.includes("cantidad") || fieldId.includes("precio")) {
+            element.dispatchEvent(new Event("keyup", { bubbles: true }));
+          }
+
+          filledCount++;
+          console.log(`Successfully filled ${fieldId}`);
+        } else {
+          const error = `Element with ID '${fieldId}' not found`;
+          console.error(error);
+          errors.push(error);
+        }
+      }
+    });
   });
 
+  // Fill "Otros Datos" field
+  if (data.otherData) {
+    const otherDataElement = document.getElementById(
+      "otrosdatosgenerales",
+    ) as HTMLTextAreaElement;
+    if (otherDataElement) {
+      console.log("Filling 'Otros Datos' field");
+      otherDataElement.className = "";
+      otherDataElement.readOnly = false;
+      otherDataElement.value = data.otherData;
+      otherDataElement.dispatchEvent(new Event("change", { bubbles: true }));
+      otherDataElement.dispatchEvent(new Event("input", { bubbles: true }));
+      filledCount++;
+    }
+  }
+
   console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
-  showNotification(
-    `Paso final completado: ${filledCount} campos rellenados`,
-    "success",
-  );
+
+  // Wait a moment for any calculations to complete, then click continue button
+  setTimeout(() => {
+    console.log("Looking for continue button...");
+    console.log(
+      "All buttons on page:",
+      Array.from(document.querySelectorAll('input[type="button"], button')).map(
+        (btn) => ({
+          tagName: btn.tagName,
+          type: btn.getAttribute("type"),
+          value: btn.getAttribute("value"),
+          onclick: btn.getAttribute("onclick"),
+          textContent: btn.textContent,
+        }),
+      ),
+    );
+
+    // Try multiple selectors for the continue button
+    const buttonSelectors = [
+      'input[type="button"][onclick="validarCampos();"]',
+      'input[type="button"][onclick*="validarCampos"]',
+      'input[type="button"][value*="Continuar"]',
+      'input[onclick="validarCampos();"]',
+      'input[onclick*="validarCampos"]',
+      'input[value="Continuar >"]',
+      'input[value*="Continuar"]',
+      'button[onclick*="validarCampos"]',
+    ];
+
+    let continueButton = null;
+    for (const selector of buttonSelectors) {
+      continueButton = document.querySelector(selector) as HTMLInputElement;
+      if (continueButton) {
+        console.log(`Found continue button with selector: ${selector}`);
+        break;
+      }
+    }
+
+    if (continueButton) {
+      console.log("Clicking continue button...");
+      continueButton.click();
+      showNotification(
+        `Paso final completado (${filledCount} campos), continuando...`,
+        "success",
+      );
+    } else {
+      console.error("Continue button not found.");
+      showNotification(
+        `Campos completados (${filledCount}), pero no se encontró el botón continuar`,
+        "error",
+      );
+    }
+  }, 1500); // Increased timeout to allow for calculations
+}
+
+function updateLineItemField(lineNumber: number, field: string, value: string) {
+  console.log(`Updating line ${lineNumber} field ${field} with value:`, value);
+
+  // Map field names to DOM field IDs
+  const fieldMapping: { [key: string]: string } = {
+    itemCode: `detalle_codigo_articulo${lineNumber}`,
+    itemDescription: `detalle_descripcion${lineNumber}`,
+    quantity: `detalle_cantidad${lineNumber}`,
+    unitOfMeasure: `detalle_medida${lineNumber}`,
+    unitPrice: `detalle_precio${lineNumber}`,
+    bonusAmount: `detalle_importe_bonificacion${lineNumber}`,
+  };
+
+  const fieldId = fieldMapping[field];
+  if (!fieldId) {
+    console.warn(`Unknown field: ${field}`);
+    return;
+  }
+
+  const element = document.getElementById(fieldId) as
+    | HTMLInputElement
+    | HTMLSelectElement
+    | HTMLTextAreaElement;
+
+  if (element) {
+    // Temporarily remove sync listener to avoid infinite loop
+    const hadListener = element.hasAttribute("data-sync-listener");
+    if (hadListener) {
+      element.removeAttribute("data-sync-listener");
+    }
+
+    element.value = value;
+
+    // Trigger change event to ensure form validation and dependent field updates
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+
+    // For quantity and price fields, trigger keyup to recalculate subtotal
+    if (field === "quantity" || field === "unitPrice") {
+      element.dispatchEvent(new Event("keyup", { bubbles: true }));
+    }
+
+    // Restore sync listener
+    if (hadListener) {
+      element.setAttribute("data-sync-listener", "true");
+    }
+
+    console.log(`Successfully updated line ${lineNumber} field ${field}`);
+  } else {
+    console.warn(`DOM element with ID '${fieldId}' not found`);
+  }
 }
 
 function updateDOMField(fieldId: string, value: string) {
@@ -625,6 +785,109 @@ function updateDOMField(fieldId: string, value: string) {
   } else {
     console.warn(`DOM element with ID '${fieldId}' not found`);
   }
+}
+
+function getLineItemRows(): HTMLTableRowElement[] {
+  const table = document.getElementById("idoperacion") as HTMLTableElement;
+  if (!table) {
+    console.warn("Could not find table with id 'idoperacion'");
+    return [];
+  }
+
+  const tbody = table.querySelector("tbody");
+  if (!tbody) {
+    console.warn("Could not find tbody in table");
+    return [];
+  }
+
+  const allRows = Array.from(tbody.querySelectorAll("tr"));
+  return allRows.slice(1) as HTMLTableRowElement[];
+}
+
+function getLineItemData(row: HTMLTableRowElement) {
+  const descriptionField = row.querySelector(
+    'textarea[name="detalleDescripcion"]',
+  ) as HTMLTextAreaElement;
+
+  if (!descriptionField || !descriptionField.id) {
+    return null;
+  }
+
+  const lineNumberMatch = descriptionField.id.match(/detalle_descripcion(\d+)/);
+  const lineNumber = lineNumberMatch ? parseInt(lineNumberMatch[1]) : 0;
+
+  if (lineNumber === 0) {
+    return null;
+  }
+
+  const itemCodeField = row.querySelector(
+    'input[name="detalleCodigoArticulo"]',
+  ) as HTMLInputElement;
+  const quantityField = row.querySelector(
+    'input[name="detalleCantidad"]',
+  ) as HTMLInputElement;
+  const measureField = row.querySelector(
+    'select[name="detalleMedida"]',
+  ) as HTMLSelectElement;
+  const priceField = row.querySelector(
+    'input[name="detallePrecio"]',
+  ) as HTMLInputElement;
+  const bonusField = row.querySelector(
+    'input[name="detalleImporteBonificacion"]',
+  ) as HTMLInputElement;
+
+  return {
+    lineNumber: lineNumber,
+    itemCode: itemCodeField?.value || "",
+    itemDescription: descriptionField.value || "",
+    quantity: quantityField?.value || "1",
+    unitOfMeasure: measureField?.value || "7",
+    unitPrice: priceField?.value || "",
+    bonusAmount: bonusField?.value || "",
+  };
+}
+
+function initializeLineItemTracking() {
+  if (!window.location.href.includes("genComDatosOperacion.do")) {
+    return;
+  }
+
+  const syncLineItemsStructure = () => {
+    const rows = getLineItemRows();
+    const lineItems = rows.map(getLineItemData);
+
+    console.log(`Found ${lineItems.length} line items in DOM:`, lineItems);
+
+    // Send updated line items to sidepanel
+    browser.runtime
+      .sendMessage({
+        action: "syncLineItemsStructure",
+        lineItems: lineItems,
+      })
+      .catch((error) => {
+        console.log(
+          "Could not sync line items (sidepanel might not be open):",
+          error,
+        );
+      });
+  };
+
+  syncLineItemsStructure();
+
+  // Use MutationObserver to detect when new elements are added
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "childList") {
+        syncLineItemsStructure();
+      }
+    });
+  });
+
+  // Start observing
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
 }
 
 function showNotification(

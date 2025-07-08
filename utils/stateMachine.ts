@@ -31,18 +31,9 @@ export const workflowMachine = createMachine({
           }),
         },
         GO_TO_STEP1: "step1",
-        GO_TO_STEP2: {
-          target: "step2",
-          guard: ({ context }) => context.completedSteps.has(1),
-        },
-        GO_TO_STEP3: {
-          target: "step3",
-          guard: ({ context }) => context.completedSteps.has(2),
-        },
-        GO_TO_STEP4: {
-          target: "step4",
-          guard: ({ context }) => context.completedSteps.has(3),
-        },
+        GO_TO_STEP2: "step2",
+        GO_TO_STEP3: "step3",
+        GO_TO_STEP4: "step4",
         RESET: {
           target: "step1",
           actions: assign({
@@ -62,14 +53,8 @@ export const workflowMachine = createMachine({
         },
         GO_TO_STEP1: "step1",
         GO_TO_STEP2: "step2",
-        GO_TO_STEP3: {
-          target: "step3",
-          guard: ({ context }) => context.completedSteps.has(2),
-        },
-        GO_TO_STEP4: {
-          target: "step4",
-          guard: ({ context }) => context.completedSteps.has(3),
-        },
+        GO_TO_STEP3: "step3",
+        GO_TO_STEP4: "step4",
         RESET: {
           target: "step1",
           actions: assign({
@@ -88,15 +73,9 @@ export const workflowMachine = createMachine({
           }),
         },
         GO_TO_STEP1: "step1",
-        GO_TO_STEP2: {
-          target: "step2",
-          guard: ({ context }) => context.completedSteps.has(1),
-        },
+        GO_TO_STEP2: "step2",
         GO_TO_STEP3: "step3",
-        GO_TO_STEP4: {
-          target: "step4",
-          guard: ({ context }) => context.completedSteps.has(3),
-        },
+        GO_TO_STEP4: "step4",
         RESET: {
           target: "step1",
           actions: assign({
@@ -114,14 +93,8 @@ export const workflowMachine = createMachine({
           }),
         },
         GO_TO_STEP1: "step1",
-        GO_TO_STEP2: {
-          target: "step2",
-          guard: ({ context }) => context.completedSteps.has(1),
-        },
-        GO_TO_STEP3: {
-          target: "step3",
-          guard: ({ context }) => context.completedSteps.has(2),
-        },
+        GO_TO_STEP2: "step2",
+        GO_TO_STEP3: "step3",
         GO_TO_STEP4: "step4",
         RESET: {
           target: "step1",

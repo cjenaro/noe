@@ -27,12 +27,17 @@ function App() {
   });
 
   const [stepFour, setStepFour] = createSignal({
-    itemCode: "",
-    itemDescription: "",
-    quantity: "1",
-    unitOfMeasure: "7",
-    unitPrice: "",
-    bonusAmount: "",
+    lineItems: [
+      {
+        lineNumber: 1,
+        itemCode: "",
+        itemDescription: "",
+        quantity: "1",
+        unitOfMeasure: "7",
+        unitPrice: "",
+        bonusAmount: "",
+      },
+    ],
     otherData: "",
   });
 
@@ -95,33 +100,14 @@ function App() {
         const currentStep = getCurrentStep();
 
         if (targetStep !== currentStep) {
-          // Navigate to the correct step
-          if (targetStep === 1 && currentStep !== 1) {
-            send({ type: "RESET" });
-          } else if (targetStep === 2 && currentStep === 1) {
-            send({ type: "NEXT_STEP" });
-          } else if (targetStep === 3 && currentStep < 3) {
-            // Go to step 3
-            if (currentStep === 1) {
-              send({ type: "NEXT_STEP" });
-              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
-            } else if (currentStep === 2) {
-              send({ type: "NEXT_STEP" });
-            }
-          } else if (targetStep === 4 && currentStep < 4) {
-            // Go to step 4
-            if (currentStep === 1) {
-              send({ type: "NEXT_STEP" });
-              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
-              setTimeout(() => send({ type: "NEXT_STEP" }), 200);
-            } else if (currentStep === 2) {
-              send({ type: "NEXT_STEP" });
-              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
-            } else if (currentStep === 3) {
-              send({ type: "NEXT_STEP" });
-            }
-          }
+          send({ type: "GO_TO_STEP" + targetStep });
         }
+      } else if (message.action === "syncLineItemsStructure") {
+        console.log("new line items:", message.lineItems);
+        setStepFour((prev) => ({
+          ...prev,
+          lineItems: message.lineItems || [],
+        }));
       }
     };
 
@@ -422,7 +408,16 @@ function App() {
 
   function handleStepFour(
     key: keyof ReturnType<typeof stepFour>,
-    value: string,
+    value:
+      | string
+      | {
+          itemCode: string;
+          itemDescription: string;
+          quantity: string;
+          unitOfMeasure: string;
+          unitPrice: string;
+          bonusAmount: string;
+        }[],
   ) {
     setStepFour((o) => ({ ...o, [key]: value }));
   }

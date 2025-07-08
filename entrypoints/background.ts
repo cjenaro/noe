@@ -36,13 +36,13 @@ export default defineBackground(() => {
           console.error("Error opening sidepanel:", error);
           sendResponse({ success: false, error: String(error) });
         }
-      } else if (message.action === "syncStep") {
-        // Forward step sync message to sidepanel
+      } else if (message.action === "syncStep" || message.action === "syncLineItemsStructure" || message.action === "syncFieldChange") {
+        // Forward step sync and line item sync messages to sidepanel
         try {
           await forwardMessageToSidepanel(message);
           sendResponse({ success: true });
         } catch (error) {
-          console.log("Could not forward step sync to sidepanel:", error);
+          console.log("Could not forward message to sidepanel:", error);
           sendResponse({ success: false, error: String(error) });
         }
       }
