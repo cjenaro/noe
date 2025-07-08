@@ -1,16 +1,16 @@
 {
-  "name": "wxt-solid-starter",
-  "description": "manifest.json description",
+  "name": "afip-invoice-helper",
+  "description": "Automate and streamline AFIP electronic invoice creation with saved client data and templates",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",
-    "dev:firefox": "wxt -b firefox",
+    "dev:firefox": "wxt -b firefox --mv3",
     "build": "wxt build",
-    "build:firefox": "wxt build -b firefox",
+    "build:firefox": "wxt build -b firefox --mv3",
     "zip": "wxt zip",
-    "zip:firefox": "wxt zip -b firefox",
+    "zip:firefox": "wxt zip -b firefox --mv3",
     "compile": "tsc --noEmit",
     "postinstall": "wxt prepare"
   },
