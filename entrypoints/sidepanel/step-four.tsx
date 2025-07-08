@@ -23,42 +23,115 @@ interface StepFourProps {
   onContinue: () => void;
 }
 
+function LineItemComponent({ line }: { line: LineItem }) {
+  return (
+    <div class="mb-4 p-3 bg-white border border-gray-200 rounded">
+      <div class="mb-2">
+        <h5 class="text-xs font-medium text-gray-600">
+          Línea {line.lineNumber}
+        </h5>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">
+            Código del Item
+          </label>
+          <input
+            type="text"
+            name={`itemCode_${line.lineNumber}`}
+            value={line.itemCode}
+            placeholder="Código..."
+            class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">
+            Cantidad
+          </label>
+          <input
+            type="text"
+            name={`quantity_${line.lineNumber}`}
+            value={line.quantity}
+            placeholder="1"
+            class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+      </div>
+
+      <div class="mb-2">
+        <label class="block text-xs font-medium text-gray-700 mb-1">
+          Descripción del Item *
+        </label>
+        <textarea
+          name={`itemDescription_${line.lineNumber}`}
+          value={line.itemDescription}
+          placeholder="Descripción del servicio o producto..."
+          class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          rows="2"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">
+            Precio Unitario
+          </label>
+          <input
+            type="text"
+            name={`unitPrice_${line.lineNumber}`}
+            value={line.unitPrice}
+            placeholder="0.00"
+            class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">
+            Importe Bonificación
+          </label>
+          <input
+            type="text"
+            name={`bonusAmount_${line.lineNumber}`}
+            value={line.bonusAmount}
+            placeholder="0.00"
+            class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function StepFour(props: StepFourProps) {
-  function updateLineItem(index: number, field: keyof LineItem, value: string) {
-    const newLineItems = [...props.stepData.lineItems];
-    const lineItem = newLineItems[index];
-    newLineItems[index] = { ...lineItem, [field]: value };
-    props.onFieldChange("lineItems", newLineItems);
-  }
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault();
+    if (!e.currentTarget || !(e.currentTarget instanceof HTMLFormElement))
+      return;
+    const formData = new FormData(e.currentTarget);
 
-  const syncOtherDataToDOM = async (value: string) => {
-    try {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      if (!tab.id) return;
-      if (!tab.url?.includes("fe.afip.gob.ar")) return;
-
-      await browser.tabs.sendMessage(tab.id, {
-        action: "updateDOMField",
-        fieldId: "otrosdatosgenerales",
-        value: value,
-      });
-    } catch (error) {
-      console.log("Could not sync other data to DOM:", error);
-    }
-  };
-
-  const hasValidLineItems = () => {
-    return (
-      props.stepData.lineItems.length > 0 &&
-      props.stepData.lineItems.some(
-        (item) => item.itemDescription.trim() !== "",
-      )
+    const updatedLineItems: LineItem[] = props.stepData.lineItems.map(
+      (item) => ({
+        lineNumber: item.lineNumber,
+        itemCode: (formData.get(`itemCode_${item.lineNumber}`) as string) || "",
+        itemDescription:
+          (formData.get(`itemDescription_${item.lineNumber}`) as string) || "",
+        quantity: (formData.get(`quantity_${item.lineNumber}`) as string) || "",
+        unitOfMeasure: item.unitOfMeasure,
+        unitPrice:
+          (formData.get(`unitPrice_${item.lineNumber}`) as string) || "",
+        bonusAmount:
+          (formData.get(`bonusAmount_${item.lineNumber}`) as string) || "",
+      }),
     );
-  };
+
+    const otherData = (formData.get("otherData") as string) || "";
+
+    props.onFieldChange("lineItems", updatedLineItems);
+    props.onFieldChange("otherData", otherData);
+    props.onContinue();
+  }
 
   return (
     <div class="mb-4 border border-purple-200 rounded-md overflow-hidden">
@@ -78,7 +151,11 @@ export function StepFour(props: StepFourProps) {
       </div>
 
       <Show when={!props.isCollapsed}>
-        <div class="p-3 bg-purple-50 border-t border-purple-200">
+        <form
+          onSubmit={handleSubmit}
+          class="p-3 bg-purple-50 border-t border-purple-200"
+          id="line-items-form"
+        >
           <div class="mb-4">
             <div class="mb-3">
               <h4 class="text-sm font-medium text-gray-700">
@@ -91,114 +168,7 @@ export function StepFour(props: StepFourProps) {
             </div>
 
             <For each={props.stepData.lineItems}>
-              {(item, index) => (
-                <div class="mb-4 p-3 bg-white border border-gray-200 rounded">
-                  <div class="mb-2">
-                    <h5 class="text-xs font-medium text-gray-600">
-                      Línea {item.lineNumber}
-                    </h5>
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2 mb-2">
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Código del Item
-                      </label>
-                      <input
-                        type="text"
-                        value={item.itemCode}
-                        onInput={(e) =>
-                          updateLineItem(
-                            index(),
-                            "itemCode",
-                            e.currentTarget.value,
-                          )
-                        }
-                        placeholder="Código..."
-                        class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Cantidad
-                      </label>
-                      <input
-                        type="text"
-                        value={item.quantity}
-                        onInput={(e) =>
-                          updateLineItem(
-                            index(),
-                            "quantity",
-                            e.currentTarget.value,
-                          )
-                        }
-                        placeholder="1"
-                        class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="mb-2">
-                    <label class="block text-xs font-medium text-gray-700 mb-1">
-                      Descripción del Item *
-                    </label>
-                    <textarea
-                      value={item.itemDescription}
-                      onInput={(e) =>
-                        updateLineItem(
-                          index(),
-                          "itemDescription",
-                          e.currentTarget.value,
-                        )
-                      }
-                      placeholder="Descripción del servicio o producto..."
-                      class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      rows="2"
-                    />
-                  </div>
-
-                  <div class="grid grid-cols-2 gap-2">
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Precio Unitario
-                      </label>
-                      <input
-                        type="text"
-                        value={item.unitPrice}
-                        onInput={(e) =>
-                          updateLineItem(
-                            index(),
-                            "unitPrice",
-                            e.currentTarget.value,
-                          )
-                        }
-                        placeholder="0.00"
-                        class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-1">
-                        Importe Bonificación
-                      </label>
-                      <input
-                        type="text"
-                        value={item.bonusAmount}
-                        onInput={(e) =>
-                          updateLineItem(
-                            index(),
-                            "bonusAmount",
-                            e.currentTarget.value,
-                          )
-                        }
-                        placeholder="0.00"
-                        class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+              {(item) => <LineItemComponent line={item} />}
             </For>
           </div>
 
@@ -207,12 +177,8 @@ export function StepFour(props: StepFourProps) {
               Otros Datos
             </label>
             <textarea
+              name="otherData"
               value={props.stepData.otherData}
-              onInput={(e) => {
-                const value = e.currentTarget.value;
-                props.onFieldChange("otherData", value);
-                syncOtherDataToDOM(value);
-              }}
               placeholder="Información adicional..."
               class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
               rows="2"
@@ -220,15 +186,13 @@ export function StepFour(props: StepFourProps) {
           </div>
 
           <button
+            type="submit"
             class="w-full px-3 py-2 bg-purple-600 text-white text-sm font-medium rounded hover:bg-purple-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-            onClick={props.onContinue}
-            disabled={!hasValidLineItems()}
           >
             Completar Factura ✓
           </button>
-        </div>
+        </form>
       </Show>
     </div>
   );
 }
-

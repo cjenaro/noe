@@ -2,11 +2,12 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { useMachine } from "@xstate/solid";
 import { storage, type ClientData } from "../../utils/storage";
 import { workflowMachine } from "@/utils/stateMachine";
-import { Autocomplete, CountryAutocomplete } from "./autocompletes";
+import { CountryAutocomplete } from "./autocompletes";
 import { StepOne } from "./step-one";
 import { StepTwo } from "./step-two";
 import { StepThree } from "./step-three";
 import { StepFour } from "./step-four";
+import { mergeLineItems } from "../../utils/mergeLineItems";
 
 function App() {
   const [clients, setClients] = createSignal<ClientData[]>([]);
@@ -105,7 +106,7 @@ function App() {
       } else if (message.action === "syncLineItemsStructure") {
         setStepFour((prev) => ({
           ...prev,
-          lineItems: message.lineItems || [],
+          lineItems: mergeLineItems(prev.lineItems, message.lineItems || []),
         }));
       }
     };
