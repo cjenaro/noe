@@ -2,17 +2,11 @@ import { createSignal, createEffect, For, Show } from "solid-js";
 import { useMachine } from "@xstate/solid";
 import { storage, type ClientData } from "../../utils/storage";
 import { workflowMachine } from "@/utils/stateMachine";
-import {
-  Autocomplete,
-  PuntoVentaAutocomplete,
-  TipoComprobanteAutocomplete,
-  IdiomaAutocomplete,
-  ConceptoAutocomplete,
-  ActividadAutocomplete,
-  MonedaAutocomplete,
-  CountryAutocomplete,
-  ClientAutocomplete,
-} from "./autocompletes";
+import { Autocomplete, CountryAutocomplete } from "./autocompletes";
+import { StepOne } from "./step-one";
+import { StepTwo } from "./step-two";
+import { StepThree } from "./step-three";
+import { StepFour } from "./step-four";
 
 function App() {
   const [clients, setClients] = createSignal<ClientData[]>([]);
@@ -29,7 +23,17 @@ function App() {
 
   const [stepThree, setStepThree] = createSignal({
     paymentMethod: "",
-    client: "",
+    selectedClientId: "",
+  });
+
+  const [stepFour, setStepFour] = createSignal({
+    itemCode: "",
+    itemDescription: "",
+    quantity: "1",
+    unitOfMeasure: "7",
+    unitPrice: "",
+    bonusAmount: "",
+    otherData: "",
   });
 
   // Step 2 fields
@@ -44,8 +48,7 @@ function App() {
 
   const [state, send] = useMachine(workflowMachine);
 
-  // Helper functions to maintain the same interface
-  const getCurrentStep = (): 1 | 2 | 3 => {
+  function getCurrentStep() {
     switch (state.value) {
       case "step1":
         return 1;
@@ -53,18 +56,20 @@ function App() {
         return 2;
       case "step3":
         return 3;
+      case "step4":
+        return 4;
       default:
         return 1;
     }
-  };
+  }
 
-  const isStepCollapsed = (step: 1 | 2 | 3): boolean => {
+  function isStepCollapsed(step: 1 | 2 | 3 | 4) {
     return getCurrentStep() !== step;
-  };
+  }
 
-  const nextStep = () => {
+  function nextStep() {
     send({ type: "NEXT_STEP" });
-  };
+  }
 
   // Load data on mount
   createEffect(async () => {
@@ -101,6 +106,18 @@ function App() {
               send({ type: "NEXT_STEP" });
               setTimeout(() => send({ type: "NEXT_STEP" }), 100);
             } else if (currentStep === 2) {
+              send({ type: "NEXT_STEP" });
+            }
+          } else if (targetStep === 4 && currentStep < 4) {
+            // Go to step 4
+            if (currentStep === 1) {
+              send({ type: "NEXT_STEP" });
+              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
+              setTimeout(() => send({ type: "NEXT_STEP" }), 200);
+            } else if (currentStep === 2) {
+              send({ type: "NEXT_STEP" });
+              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
+            } else if (currentStep === 3) {
               send({ type: "NEXT_STEP" });
             }
           }
@@ -277,6 +294,100 @@ function App() {
     }
   }
 
+  async function fillStep3AndContinue() {
+    try {
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (!tab.id) {
+        throw new Error("No active tab found");
+      }
+
+      if (!tab.url?.includes("fe.afip.gob.ar")) {
+        throw new Error(
+          "No estás en una página de AFIP. Ve a fe.afip.gob.ar primero.",
+        );
+      }
+
+      // Get selected client data
+      const selectedClientId = stepThree().selectedClientId;
+      if (!selectedClientId) {
+        throw new Error("Debe seleccionar un cliente");
+      }
+
+      const clientsData = await storage.getClients();
+      const selectedClient = clientsData.find(
+        (client) => client.id === selectedClientId,
+      );
+
+      if (!selectedClient) {
+        throw new Error("Cliente seleccionado no encontrado");
+      }
+
+      const response = await browser.tabs.sendMessage(tab.id, {
+        action: "fillStep3AndContinue",
+        data: {
+          ...selectedClient,
+          paymentMethod: stepThree().paymentMethod,
+        },
+      });
+
+      if (response?.success) {
+        showNotification("Paso 3 completado ✓", "success");
+        nextStep();
+      } else {
+        throw new Error(
+          response?.error || "Error desconocido del content script",
+        );
+      }
+    } catch (error) {
+      console.error("Error filling step 3:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
+      showNotification(`Error: ${errorMessage}`, "error");
+    }
+  }
+
+  async function fillStep4AndContinue() {
+    try {
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+
+      if (!tab.id) {
+        throw new Error("No active tab found");
+      }
+
+      if (!tab.url?.includes("fe.afip.gob.ar")) {
+        throw new Error(
+          "No estás en una página de AFIP. Ve a fe.afip.gob.ar primero.",
+        );
+      }
+
+      const response = await browser.tabs.sendMessage(tab.id, {
+        action: "fillFinalStep",
+        data: stepFour(),
+      });
+
+      if (response?.success) {
+        showNotification("Paso 4 completado ✓", "success");
+        // Don't call nextStep() as this is the final step
+      } else {
+        throw new Error(
+          response?.error || "Error desconocido del content script",
+        );
+      }
+    } catch (error) {
+      console.error("Error filling step 4:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Error desconocido";
+      showNotification(`Error: ${errorMessage}`, "error");
+    }
+  }
+
   const showNotification = (message: string, type: "success" | "error") => {
     // Create a simple notification element
     const notification = document.createElement("div");
@@ -307,6 +418,13 @@ function App() {
     value: string,
   ) {
     setStepThree((o) => ({ ...o, [key]: value }));
+  }
+
+  function handleStepFour(
+    key: keyof ReturnType<typeof stepFour>,
+    value: string,
+  ) {
+    setStepFour((o) => ({ ...o, [key]: value }));
   }
 
   return (
@@ -349,237 +467,33 @@ function App() {
               </div>
             </div>
 
-            {/* Step 1: AFIP Form Configuration */}
-            <div class="mb-4 border border-blue-200 rounded-md">
-              <div
-                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(1) ? "bg-green-100 border-green-200" : "bg-blue-50"}`}
-              >
-                <h3
-                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(1) ? "text-green-900" : "text-blue-900"}`}
-                >
-                  <span>
-                    {isStepCollapsed(1)
-                      ? "✅ Paso 1: Completado"
-                      : "📋 Paso 1: Configuración AFIP"}
-                  </span>
-                  <span class="text-xs">{isStepCollapsed(1) ? "▲" : "▼"}</span>
-                </h3>
-              </div>
+            <StepOne
+              isCollapsed={isStepCollapsed(1)}
+              stepData={stepOne()}
+              onFieldChange={handleStepOne}
+              onContinue={fillStep1AndContinue}
+            />
 
-              <Show when={!isStepCollapsed(1)}>
-                <div class="p-3 bg-blue-50 border-t border-blue-200">
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Punto de Venta *
-                    </label>
-                    <PuntoVentaAutocomplete
-                      value={stepOne().puntoVenta}
-                      onChange={(value) => handleStepOne("puntoVenta", value)}
-                    />
-                  </div>
+            <StepTwo
+              isCollapsed={isStepCollapsed(2)}
+              stepData={stepTwo()}
+              onFieldChange={handleStepTwo}
+              onContinue={fillStep2AndContinue}
+            />
 
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Tipo de Comprobante *
-                    </label>
-                    <TipoComprobanteAutocomplete
-                      value={stepOne().tipoComprobante}
-                      onChange={(value) =>
-                        handleStepOne("tipoComprobante", value)
-                      }
-                      puntoVentaValue={stepOne().puntoVenta}
-                    />
-                  </div>
+            <StepThree
+              isCollapsed={isStepCollapsed(3)}
+              stepData={stepThree()}
+              onFieldChange={handleStepThree}
+              onContinue={fillStep3AndContinue}
+            />
 
-                  <button
-                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    onClick={fillStep1AndContinue}
-                    disabled={
-                      !stepOne().puntoVenta || !stepOne().tipoComprobante
-                    }
-                  >
-                    Continuar al Paso 2 →
-                  </button>
-                </div>
-              </Show>
-            </div>
-
-            {/* Step 2: Invoice Configuration */}
-            <div class="mb-4 border border-orange-200 rounded-md">
-              <div
-                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(2) ? "bg-green-100 border-green-200" : "bg-orange-50"}`}
-              >
-                <h3
-                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(2) ? "text-green-900" : "text-orange-900"}`}
-                >
-                  <span>
-                    {isStepCollapsed(2)
-                      ? "✅ Paso 2: Completado"
-                      : "⚙️ Paso 2: Configuración de Factura"}
-                  </span>
-                  <span class="text-xs">{isStepCollapsed(2) ? "▲" : "▼"}</span>
-                </h3>
-              </div>
-
-              <Show when={!isStepCollapsed(2)}>
-                <div class="p-3 bg-orange-50 border-t border-orange-200">
-                  <div class="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-2">
-                        Idioma
-                      </label>
-                      <IdiomaAutocomplete
-                        value={stepTwo().idioma}
-                        onChange={(value) => handleStepTwo("idioma", value)}
-                      />
-                    </div>
-
-                    <div>
-                      <label class="block text-xs font-medium text-gray-700 mb-2">
-                        Fecha (DD/MM/YYYY)
-                      </label>
-                      <input
-                        type="text"
-                        value={stepTwo().fechaComprobante}
-                        onInput={(e) =>
-                          handleStepTwo(
-                            "fechaComprobante",
-                            e.currentTarget.value,
-                          )
-                        }
-                        placeholder="01/01/2024"
-                        class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Concepto *
-                    </label>
-                    <ConceptoAutocomplete
-                      value={stepTwo().concepto}
-                      onChange={(value) => handleStepTwo("concepto", value)}
-                    />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Actividad
-                    </label>
-                    <ActividadAutocomplete
-                      value={stepTwo().actividad}
-                      onChange={(v) => handleStepTwo("actividad", v)}
-                    />
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="flex items-center text-xs font-medium text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={stepTwo().monedaExtranjera}
-                        onChange={(e) =>
-                          handleStepTwo("monedaExtranjera", e.target.checked)
-                        }
-                        class="mr-2"
-                      />
-                      Moneda Extranjera
-                    </label>
-                  </div>
-
-                  <Show when={stepTwo().monedaExtranjera}>
-                    <div class="mb-3">
-                      <label class="block text-xs font-medium text-gray-700 mb-2">
-                        Moneda
-                      </label>
-                      <MonedaAutocomplete
-                        value={stepTwo().selectedMoneda}
-                        onChange={(value) =>
-                          handleStepTwo("selectedMoneda", value)
-                        }
-                      />
-                    </div>
-                  </Show>
-
-                  <button
-                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    onClick={fillStep2AndContinue}
-                    disabled={!stepTwo().concepto}
-                  >
-                    Continuar al Paso 3 →
-                  </button>
-                </div>
-              </Show>
-            </div>
-
-            {/* Step 3: Client Data and Payment Method */}
-            <div class="mb-4 border border-green-200 rounded-md">
-              <div
-                class={`p-3 cursor-pointer transition-colors ${isStepCollapsed(3) ? "bg-green-100 border-green-200" : "bg-green-50"}`}
-              >
-                <h3
-                  class={`text-sm font-medium flex items-center justify-between ${isStepCollapsed(3) ? "text-green-900" : "text-green-900"}`}
-                >
-                  <span>
-                    {isStepCollapsed(3)
-                      ? "✅ Paso 3: Completado"
-                      : "👥 Paso 3: Datos del Cliente"}
-                  </span>
-                  <span class="text-xs">{isStepCollapsed(3) ? "▲" : "▼"}</span>
-                </h3>
-              </div>
-
-              <Show when={!isStepCollapsed(3)}>
-                <div class="p-3 bg-green-50 border-t border-green-200">
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Forma de Pago (opcional)
-                    </label>
-                    <Autocomplete
-                      value={stepThree().paymentMethod}
-                      onChange={(v) => handleStepThree("paymentMethod", v)}
-                      options={[
-                        "A percibir en USDT",
-                        "A percibir en BTC",
-                        "A percibir en ETH",
-                        "A percibir en USDC",
-                        "A percibir en DAI",
-                        "A percibir en ARS",
-                        "A percibir en USD",
-                        "A percibir en EUR",
-                        "Transferencia bancaria",
-                        "Efectivo",
-                        "Cheque",
-                        "Tarjeta de crédito",
-                        "Tarjeta de débito",
-                        "Mercado Pago",
-                        "PayPal",
-                        "Western Union",
-                        "MoneyGram",
-                      ].map((method) => ({ value: method, label: method }))}
-                      placeholder="Escribir o seleccionar forma de pago..."
-                      allowCustom={true}
-                    />
-                  </div>
-                  <div class="mb-3">
-                    <label class="block text-xs font-medium text-gray-700 mb-2">
-                      Cliente
-                    </label>
-                    <ClientAutocomplete
-                      value={stepThree().client}
-                      onChange={(v) => handleStepThree("client", v)}
-                    />
-                  </div>
-                  <button
-                    class="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    onClick={fillStep3AndContinue}
-                    disabled={!stepThree().client || !stepThree().paymentMethod}
-                  >
-                    Continuar al Paso 4 →
-                  </button>
-                </div>
-              </Show>
-            </div>
+            <StepFour
+              isCollapsed={isStepCollapsed(4)}
+              stepData={stepFour()}
+              onFieldChange={handleStepFour}
+              onContinue={fillStep4AndContinue}
+            />
 
             <Show when={showForm()}>
               <ClientForm

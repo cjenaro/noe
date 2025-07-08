@@ -91,8 +91,8 @@ function initializeAfipHelper() {
     console.log("Content script received message:", message);
 
     try {
-      if (message.action === "fillForm") {
-        fillAfipForm(message.data);
+      if (message.action === "fillStep3AndContinue") {
+        fillStep3AndContinue(message.data);
         sendResponse({ success: true });
       } else if (message.action === "fillStep1AndContinue") {
         fillStep1AndContinue(message.data);
@@ -379,7 +379,7 @@ function fillStep2AndContinue(data: any) {
   }, 1000); // Increased timeout to 1 second
 }
 
-function fillAfipForm(data: any) {
+function fillStep3AndContinue(data: any) {
   // First step fields (punto de venta and tipo de comprobante)
   const firstStepFields = {
     puntodeventa: data.puntoVenta,
@@ -440,10 +440,60 @@ function fillAfipForm(data: any) {
     ...firstStepFields,
     ...secondStepFields,
   }).filter(Boolean).length;
-  showNotification(
-    `Formulario completado: ${filledFields} campos rellenados`,
-    "success",
-  );
+  
+  // Wait a moment for any async validation, then click continue button
+  setTimeout(() => {
+    console.log("Looking for continue button...");
+    console.log("Current page URL:", window.location.href);
+    console.log(
+      "All buttons on page:",
+      Array.from(document.querySelectorAll("input[type=\"button\"], button")).map(
+        (btn) => ({
+          tagName: btn.tagName,
+          type: btn.getAttribute("type"),
+          value: btn.getAttribute("value"),
+          onclick: btn.getAttribute("onclick"),
+          textContent: btn.textContent,
+        }),
+      ),
+    );
+
+    // Try multiple selectors for the continue button
+    const buttonSelectors = [
+      'input[type="button"][onclick="validarCampos();"]',
+      'input[type="button"][onclick*="validarCampos"]',
+      'input[type="button"][value*="Continuar"]',
+      'input[onclick="validarCampos();"]',
+      'input[onclick*="validarCampos"]',
+      'input[value="Continuar >"]',
+      'input[value*="Continuar"]',
+      'button[onclick*="validarCampos"]',
+    ];
+
+    let continueButton = null;
+    for (const selector of buttonSelectors) {
+      continueButton = document.querySelector(selector) as HTMLInputElement;
+      if (continueButton) {
+        console.log(`Found continue button with selector: ${selector}`);
+        break;
+      }
+    }
+
+    if (continueButton) {
+      console.log("Clicking continue button...");
+      continueButton.click();
+      showNotification(
+        `Paso 3 completado (${filledFields} campos), continuando...`,
+        "success",
+      );
+    } else {
+      console.error("Continue button not found.");
+      showNotification(
+        `Campos completados (${filledFields}), pero no se encontró el botón continuar`,
+        "error",
+      );
+    }
+  }, 1000);
 }
 
 function extractFormData() {
