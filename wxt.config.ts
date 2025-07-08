@@ -16,10 +16,10 @@ export default defineConfig({
       "Automate and streamline AFIP electronic invoice creation with saved client data and templates",
     icons: {
       "16": "icon/16.png",
-      "32": "icon/32.png", 
+      "32": "icon/32.png",
       "48": "icon/48.png",
       "96": "icon/96.png",
-      "128": "icon/128.png"
+      "128": "icon/128.png",
     },
     content_security_policy: {
       extension_pages:
@@ -35,6 +35,11 @@ export default defineConfig({
     sidebar_action: {
       default_title: "AFIP Invoice Helper",
       default_panel: "sidepanel.html",
+    },
+    browser_specific_settings: {
+      gecko: {
+        id: "afip-invoice-helper",
+      },
     },
   },
 });
