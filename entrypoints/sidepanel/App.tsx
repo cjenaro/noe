@@ -106,7 +106,7 @@ function App() {
       } else if (message.action === "syncLineItemsStructure") {
         setStepFour((prev) => ({
           ...prev,
-          lineItems: mergeLineItems(prev.lineItems, message.lineItems || []),
+          lineItems: mergeLineItems(message.lineItems || []),
         }));
       }
     };
