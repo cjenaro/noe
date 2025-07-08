@@ -77,6 +77,44 @@ function App() {
     }
   });
 
+  // Listen for step sync messages from content script
+  createEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message.action === 'syncStep') {
+        console.log(`Syncing to step ${message.step} from URL: ${message.url}`);
+        
+        // Update state machine to match the current step
+        const targetStep = message.step;
+        const currentStep = getCurrentStep();
+        
+        if (targetStep !== currentStep) {
+          // Navigate to the correct step
+          if (targetStep === 1 && currentStep !== 1) {
+            send({ type: "RESET" });
+          } else if (targetStep === 2 && currentStep === 1) {
+            send({ type: "NEXT_STEP" });
+          } else if (targetStep === 3 && currentStep < 3) {
+            // Go to step 3
+            if (currentStep === 1) {
+              send({ type: "NEXT_STEP" });
+              setTimeout(() => send({ type: "NEXT_STEP" }), 100);
+            } else if (currentStep === 2) {
+              send({ type: "NEXT_STEP" });
+            }
+          }
+        }
+      }
+    };
+
+    // Listen for messages from background script
+    browser.runtime.onMessage.addListener(handleMessage);
+
+    // Cleanup listener on component unmount
+    return () => {
+      browser.runtime.onMessage.removeListener(handleMessage);
+    };
+  });
+
   async function fillForm(client: ClientData) {
     try {
       const [tab] = await browser.tabs.query({

@@ -78,3 +78,29 @@ export async function updateDOMField(fieldKey: FieldKey, value: string): Promise
     console.error(`Error updating DOM field ${fieldKey}:`, error);
   }
 }
+
+// Fill the final step with item details
+export async function fillFinalStep(data: {
+  itemCode?: string;
+  itemDescription?: string;
+  quantity?: string;
+  unitOfMeasure?: string;
+  unitPrice?: string;
+  bonusAmount?: string;
+  otherData?: string;
+}): Promise<void> {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab.id) {
+      throw new Error('No active tab found');
+    }
+
+    await browser.tabs.sendMessage(tab.id, {
+      action: 'fillFinalStep',
+      data
+    });
+  } catch (error) {
+    console.error('Error filling final step:', error);
+    throw error;
+  }
+}

@@ -36,6 +36,15 @@ export default defineBackground(() => {
           console.error("Error opening sidepanel:", error);
           sendResponse({ success: false, error: String(error) });
         }
+      } else if (message.action === "syncStep") {
+        // Forward step sync message to sidepanel
+        try {
+          await forwardMessageToSidepanel(message);
+          sendResponse({ success: true });
+        } catch (error) {
+          console.log("Could not forward step sync to sidepanel:", error);
+          sendResponse({ success: false, error: String(error) });
+        }
       }
 
       return true; // Keep the message channel open for async response
@@ -66,4 +75,28 @@ async function openSidePanel(tab: Browser.tabs.Tab) {
   // }
 
   throw new Error("Neither sidePanel nor sidebarAction API is available");
+}
+
+async function forwardMessageToSidepanel(message: any) {
+  // Get all tabs to find the sidepanel
+  const tabs = await browser.tabs.query({});
+  
+  for (const tab of tabs) {
+    if (tab.url?.includes(browser.runtime.getURL("/sidepanel.html"))) {
+      try {
+        await browser.tabs.sendMessage(tab.id!, message);
+        console.log("Step sync message forwarded to sidepanel");
+        return;
+      } catch (error) {
+        console.log("Could not send message to sidepanel tab:", error);
+      }
+    }
+  }
+  
+  // Alternative: try to send to all extension contexts
+  try {
+    await browser.runtime.sendMessage(message);
+  } catch (error) {
+    console.log("Could not broadcast step sync message:", error);
+  }
 }

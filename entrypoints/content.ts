@@ -1,62 +1,137 @@
 export default defineContentScript({
-  matches: ['*://fe.afip.gob.ar/*'],
+  matches: ["*://fe.afip.gob.ar/*"],
   main() {
-    console.log('AFIP Invoice Helper content script loaded on:', window.location.href);
-    
+    console.log(
+      "AFIP Invoice Helper content script loaded on:",
+      window.location.href,
+    );
+
     // Always initialize the helper to listen for messages
     initializeAfipHelper();
-    
+
     // Always show floating button on AFIP pages
-    console.log('AFIP page detected, adding floating button');
+    console.log("AFIP page detected, adding floating button");
     createFloatingButton();
+
+    // Initialize navigation sync
+    initializeNavigationSync();
   },
 });
 
+// URL to step mapping
+const URL_STEP_MAPPING = {
+  "buscarPtosVtas.do": 1,
+  "genComDatosEmisor.do": 2,
+  "genComDatosReceptor.do": 3,
+  "genComDatosOperacion.do": 4,
+} as const;
+
+function getCurrentStepFromURL(): number {
+  const url = window.location.href;
+  console.log("Checking step for URL:", url);
+
+  for (const [urlPattern, step] of Object.entries(URL_STEP_MAPPING)) {
+    if (url.includes(urlPattern)) {
+      console.log(`Found step ${step} for URL pattern: ${urlPattern}`);
+      return step;
+    }
+  }
+
+  console.log("No step mapping found for URL, defaulting to step 1");
+  return 1;
+}
+
+function initializeNavigationSync() {
+  console.log("Initializing navigation sync...");
+
+  syncStepWithSidepanel();
+
+  window.addEventListener("popstate", () => {
+    console.log("Popstate event detected");
+    setTimeout(syncStepWithSidepanel, 100);
+  });
+
+  const originalPushState = history.pushState;
+  const originalReplaceState = history.replaceState;
+
+  history.pushState = function (...args) {
+    originalPushState.apply(history, args);
+    console.log("PushState detected");
+    setTimeout(syncStepWithSidepanel, 100);
+  };
+
+  history.replaceState = function (...args) {
+    originalReplaceState.apply(history, args);
+    console.log("ReplaceState detected");
+    setTimeout(syncStepWithSidepanel, 100);
+  };
+}
+
+function syncStepWithSidepanel() {
+  const currentStep = getCurrentStepFromURL();
+  console.log(`Syncing step ${currentStep} with sidepanel`);
+
+  // Send message to background script to forward to sidepanel
+  browser.runtime
+    .sendMessage({
+      action: "syncStep",
+      step: currentStep,
+      url: window.location.href,
+    })
+    .catch((error) => {
+      console.log("Could not sync step (sidepanel might not be open):", error);
+    });
+}
+
 function initializeAfipHelper() {
-  console.log('AFIP helper initializing message listeners...');
-  
+  console.log("AFIP helper initializing message listeners...");
+
   // Listen for messages from popup
   browser.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    console.log('Content script received message:', message);
-    
+    console.log("Content script received message:", message);
+
     try {
-      if (message.action === 'fillForm') {
+      if (message.action === "fillForm") {
         fillAfipForm(message.data);
         sendResponse({ success: true });
-      } else if (message.action === 'fillStep1AndContinue') {
+      } else if (message.action === "fillStep1AndContinue") {
         fillStep1AndContinue(message.data);
         sendResponse({ success: true });
-      } else if (message.action === 'fillStep2AndContinue') {
+      } else if (message.action === "fillStep2AndContinue") {
         fillStep2AndContinue(message.data);
         sendResponse({ success: true });
-      } else if (message.action === 'extractForm') {
+      } else if (message.action === "extractForm") {
         const formData = extractFormData();
         sendResponse({ data: formData });
-      } else if (message.action === 'getSelectOptions') {
+      } else if (message.action === "getSelectOptions") {
         const options = getSelectOptions(message.fieldId);
         sendResponse({ success: true, options });
-      } else if (message.action === 'updateDOMField') {
+      } else if (message.action === "updateDOMField") {
         updateDOMField(message.fieldId, message.value);
         sendResponse({ success: true });
+      } else if (message.action === "fillFinalStep") {
+        fillFinalStep(message.data);
+        sendResponse({ success: true });
       } else {
-        console.log('Unknown action:', message.action);
-        sendResponse({ success: false, error: 'Unknown action' });
+        console.log("Unknown action:", message.action);
+        sendResponse({ success: false, error: "Unknown action" });
       }
     } catch (error) {
-      console.error('Error handling message:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error("Error handling message:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       sendResponse({ success: false, error: errorMessage });
     }
-    
+
     // Return true to indicate we will send a response asynchronously
     return true;
   });
 }
 
 function createFloatingButton() {
-  const button = document.createElement('div');
-  button.id = 'afip-helper-btn';
-  button.innerHTML = '🇦🇷';
+  const button = document.createElement("div");
+  button.id = "afip-helper-btn";
+  button.innerHTML = "🇦🇷";
   button.style.cssText = `
     position: fixed;
     top: 20px;
@@ -75,46 +150,51 @@ function createFloatingButton() {
     box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     transition: all 0.3s ease;
   `;
-  
-  button.addEventListener('click', async () => {
+
+  button.addEventListener("click", async () => {
     try {
       // Send message to background script to open sidebar/sidepanel
-      const response = await browser.runtime.sendMessage({ command: 'openSidebar' });
+      const response = await browser.runtime.sendMessage({
+        command: "openSidebar",
+      });
       if (response?.success) {
-        showNotification('Panel lateral abierto ✓', 'success');
+        showNotification("Panel lateral abierto ✓", "success");
       } else {
-        showNotification('Error al abrir panel: ' + (response?.error || 'Unknown error'), 'error');
+        showNotification(
+          "Error al abrir panel: " + (response?.error || "Unknown error"),
+          "error",
+        );
       }
     } catch (error) {
-      console.error('Error requesting sidebar:', error);
-      showNotification('Error al abrir panel lateral', 'error');
+      console.error("Error requesting sidebar:", error);
+      showNotification("Error al abrir panel lateral", "error");
     }
   });
-  
-  button.addEventListener('mouseenter', () => {
-    button.style.transform = 'scale(1.1)';
+
+  button.addEventListener("mouseenter", () => {
+    button.style.transform = "scale(1.1)";
   });
-  
-  button.addEventListener('mouseleave', () => {
-    button.style.transform = 'scale(1)';
+
+  button.addEventListener("mouseleave", () => {
+    button.style.transform = "scale(1)";
   });
-  
+
   document.body.appendChild(button);
 }
 
 function fillStep1AndContinue(data: any) {
-  console.log('fillStep1AndContinue called with data:', data);
-  console.log('Current page URL:', window.location.href);
-  
+  console.log("fillStep1AndContinue called with data:", data);
+  console.log("Current page URL:", window.location.href);
+
   // Fill first step fields only
   const firstStepFields = {
     puntodeventa: data.puntoVenta,
-    universocomprobante: data.tipoComprobante
+    universocomprobante: data.tipoComprobante,
   };
-  
+
   let filledCount = 0;
   let errors: string[] = [];
-  
+
   // Fill first step fields
   Object.entries(firstStepFields).forEach(([fieldId, value]) => {
     console.log(`Trying to fill field ${fieldId} with value:`, value);
@@ -124,8 +204,8 @@ function fillStep1AndContinue(data: any) {
         console.log(`Found element ${fieldId}, setting value...`);
         element.value = value;
         // Trigger change event to ensure form validation and dependent field updates
-        element.dispatchEvent(new Event('change', { bubbles: true }));
-        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.dispatchEvent(new Event("input", { bubbles: true }));
         filledCount++;
         console.log(`Successfully filled ${fieldId}`);
       } else {
@@ -139,20 +219,25 @@ function fillStep1AndContinue(data: any) {
       errors.push(error);
     }
   });
-  
+
   console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
-  
+
   // Wait a moment for any async validation, then click continue button
   setTimeout(() => {
-    console.log('Looking for continue button...');
-    console.log('All buttons on page:', Array.from(document.querySelectorAll('input[type="button"], button')).map(btn => ({
-      tagName: btn.tagName,
-      type: btn.getAttribute('type'),
-      value: btn.getAttribute('value'),
-      onclick: btn.getAttribute('onclick'),
-      textContent: btn.textContent
-    })));
-    
+    console.log("Looking for continue button...");
+    console.log(
+      "All buttons on page:",
+      Array.from(document.querySelectorAll('input[type="button"], button')).map(
+        (btn) => ({
+          tagName: btn.tagName,
+          type: btn.getAttribute("type"),
+          value: btn.getAttribute("value"),
+          onclick: btn.getAttribute("onclick"),
+          textContent: btn.textContent,
+        }),
+      ),
+    );
+
     // Try multiple selectors for the continue button
     const buttonSelectors = [
       'input[type="button"][onclick="validarCampos();"]',
@@ -162,9 +247,9 @@ function fillStep1AndContinue(data: any) {
       'input[onclick*="validarCampos"]',
       'input[value="Continuar >"]',
       'input[value*="Continuar"]',
-      'button[onclick*="validarCampos"]'
+      'button[onclick*="validarCampos"]',
     ];
-    
+
     let continueButton = null;
     for (const selector of buttonSelectors) {
       continueButton = document.querySelector(selector) as HTMLInputElement;
@@ -173,52 +258,60 @@ function fillStep1AndContinue(data: any) {
         break;
       }
     }
-    
+
     if (continueButton) {
-      console.log('Clicking continue button...');
+      console.log("Clicking continue button...");
       continueButton.click();
-      showNotification(`Paso 1 completado (${filledCount} campos), continuando...`, 'success');
+      showNotification(
+        `Paso 1 completado (${filledCount} campos), continuando...`,
+        "success",
+      );
     } else {
-      console.error('Continue button not found.');
-      showNotification(`Campos completados (${filledCount}), pero no se encontró el botón continuar`, 'error');
+      console.error("Continue button not found.");
+      showNotification(
+        `Campos completados (${filledCount}), pero no se encontró el botón continuar`,
+        "error",
+      );
     }
   }, 1000); // Increased timeout to 1 second
 }
 
 function fillStep2AndContinue(data: any) {
-  console.log('fillStep2AndContinue called with data:', data);
-  
+  console.log("fillStep2AndContinue called with data:", data);
+
   // Step 2 fields mapping
   const step2Fields = {
     ididioma: data.idioma,
     fc: data.fechaComprobante, // fecha comprobante
     idconcepto: data.concepto,
     actiAsociadaId: data.actividad,
-    monedaextranjera: data.monedaExtranjera ? 'on' : '', // checkbox
-    moneda: data.moneda
+    monedaextranjera: data.monedaExtranjera ? "on" : "", // checkbox
+    moneda: data.moneda,
   };
-  
+
   let filledCount = 0;
   let errors: string[] = [];
-  
+
   // Fill step 2 fields
   Object.entries(step2Fields).forEach(([fieldId, value]) => {
     console.log(`Trying to fill field ${fieldId} with value:`, value);
-    if (value !== undefined && value !== '') {
-      const element = document.getElementById(fieldId) as HTMLInputElement | HTMLSelectElement;
+    if (value !== undefined && value !== "") {
+      const element = document.getElementById(fieldId) as
+        | HTMLInputElement
+        | HTMLSelectElement;
       if (element) {
         console.log(`Found element ${fieldId}, setting value...`);
-        
-        if (element.type === 'checkbox') {
-          (element as HTMLInputElement).checked = value === 'on';
+
+        if (element.type === "checkbox") {
+          (element as HTMLInputElement).checked = value === "on";
           // Trigger click event for checkboxes to ensure proper handling
           element.click();
         } else {
           element.value = value;
         }
-        
+
         // Trigger change event to ensure form validation and dependent field updates
-        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
         filledCount++;
         console.log(`Successfully filled ${fieldId}`);
       } else {
@@ -228,21 +321,26 @@ function fillStep2AndContinue(data: any) {
       }
     }
   });
-  
+
   console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
-  
+
   // Wait a moment for any async validation, then click continue button
   setTimeout(() => {
-    console.log('Looking for continue button...');
-    console.log('Current page URL:', window.location.href);
-    console.log('All buttons on page:', Array.from(document.querySelectorAll('input[type="button"], button')).map(btn => ({
-      tagName: btn.tagName,
-      type: btn.getAttribute('type'),
-      value: btn.getAttribute('value'),
-      onclick: btn.getAttribute('onclick'),
-      textContent: btn.textContent
-    })));
-    
+    console.log("Looking for continue button...");
+    console.log("Current page URL:", window.location.href);
+    console.log(
+      "All buttons on page:",
+      Array.from(document.querySelectorAll('input[type="button"], button')).map(
+        (btn) => ({
+          tagName: btn.tagName,
+          type: btn.getAttribute("type"),
+          value: btn.getAttribute("value"),
+          onclick: btn.getAttribute("onclick"),
+          textContent: btn.textContent,
+        }),
+      ),
+    );
+
     // Try multiple selectors for the continue button
     const buttonSelectors = [
       'input[type="button"][onclick="validarCampos();"]',
@@ -252,9 +350,9 @@ function fillStep2AndContinue(data: any) {
       'input[onclick*="validarCampos"]',
       'input[value="Continuar >"]',
       'input[value*="Continuar"]',
-      'button[onclick*="validarCampos"]'
+      'button[onclick*="validarCampos"]',
     ];
-    
+
     let continueButton = null;
     for (const selector of buttonSelectors) {
       continueButton = document.querySelector(selector) as HTMLInputElement;
@@ -263,14 +361,20 @@ function fillStep2AndContinue(data: any) {
         break;
       }
     }
-    
+
     if (continueButton) {
-      console.log('Clicking continue button...');
+      console.log("Clicking continue button...");
       continueButton.click();
-      showNotification(`Paso 2 completado (${filledCount} campos), continuando...`, 'success');
+      showNotification(
+        `Paso 2 completado (${filledCount} campos), continuando...`,
+        "success",
+      );
     } else {
-      console.error('Continue button not found.');
-      showNotification(`Campos completados (${filledCount}), pero no se encontró el botón continuar`, 'error');
+      console.error("Continue button not found.");
+      showNotification(
+        `Campos completados (${filledCount}), pero no se encontró el botón continuar`,
+        "error",
+      );
     }
   }, 1000); // Increased timeout to 1 second
 }
@@ -279,9 +383,9 @@ function fillAfipForm(data: any) {
   // First step fields (punto de venta and tipo de comprobante)
   const firstStepFields = {
     puntodeventa: data.puntoVenta,
-    universocomprobante: data.tipoComprobante
+    universocomprobante: data.tipoComprobante,
   };
-  
+
   // Second step fields (client data)
   const secondStepFields = {
     destino: data.country,
@@ -293,9 +397,9 @@ function fillAfipForm(data: any) {
     descripcionformadepago: data.paymentMethod,
     incoterm: data.incoterm,
     detalleincoterm: data.incotermDetail,
-    otrosdatoscomerciales: data.otherData
+    otrosdatoscomerciales: data.otherData,
   };
-  
+
   // Fill first step fields
   Object.entries(firstStepFields).forEach(([fieldId, value]) => {
     if (value) {
@@ -303,93 +407,183 @@ function fillAfipForm(data: any) {
       if (element) {
         element.value = value;
         // Trigger change event to ensure form validation and dependent field updates
-        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }
   });
-  
+
   // Fill second step fields
   Object.entries(secondStepFields).forEach(([fieldId, value]) => {
     if (value) {
-      const element = document.getElementById(fieldId) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+      const element = document.getElementById(fieldId) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | HTMLTextAreaElement;
       if (element) {
         element.value = value;
         // Trigger change event to ensure form validation
-        element.dispatchEvent(new Event('change', { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        console.log(`Successfully filled ${fieldId} with value: ${value}`);
+      } else {
+        console.warn(
+          `Field ${fieldId} not found on current page. Available form fields:`,
+          Array.from(document.querySelectorAll("input, select, textarea"))
+            .map((el) => el.id)
+            .filter((id) => id),
+        );
       }
     }
   });
-  
+
   // Show success notification
-  const filledFields = Object.values({...firstStepFields, ...secondStepFields}).filter(Boolean).length;
-  showNotification(`Formulario completado: ${filledFields} campos rellenados`, 'success');
+  const filledFields = Object.values({
+    ...firstStepFields,
+    ...secondStepFields,
+  }).filter(Boolean).length;
+  showNotification(
+    `Formulario completado: ${filledFields} campos rellenados`,
+    "success",
+  );
 }
 
 function extractFormData() {
   const getValue = (id: string) => {
-    const element = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-    return element?.value || '';
+    const element = document.getElementById(id) as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | HTMLTextAreaElement;
+    return element?.value || "";
   };
-  
+
   return {
-    country: getValue('destino'),
-    cuit: getValue('nrodocreceptor'), // Use CUIT as primary value
-    companyName: getValue('razonsocialreceptor'),
-    address: getValue('domicilioreceptor'),
-    email: getValue('email'),
-    paymentMethod: getValue('descripcionformadepago'),
-    incoterm: getValue('incoterm'),
-    incotermDetail: getValue('detalleincoterm'),
-    otherData: getValue('otrosdatoscomerciales')
+    country: getValue("destino"),
+    cuit: getValue("nrodocreceptor"), // Use CUIT as primary value
+    companyName: getValue("razonsocialreceptor"),
+    address: getValue("domicilioreceptor"),
+    email: getValue("email"),
+    paymentMethod: getValue("descripcionformadepago"),
+    incoterm: getValue("incoterm"),
+    incotermDetail: getValue("detalleincoterm"),
+    otherData: getValue("otrosdatoscomerciales"),
   };
 }
 
-function getSelectOptions(fieldId: string): Array<{ value: string; label: string }> {
+function getSelectOptions(
+  fieldId: string,
+): Array<{ value: string; label: string }> {
   console.log(`Getting options for field: ${fieldId}`);
-  
+
   const selectElement = document.getElementById(fieldId) as HTMLSelectElement;
   if (!selectElement) {
     console.warn(`Select element with ID '${fieldId}' not found`);
     return [];
   }
-  
+
   const options: Array<{ value: string; label: string }> = [];
-  
+
   // Get all option elements
-  const optionElements = selectElement.querySelectorAll('option');
-  
+  const optionElements = selectElement.querySelectorAll("option");
+
   optionElements.forEach((option) => {
     const value = option.value;
-    const label = option.textContent?.trim() || option.innerText?.trim() || '';
-    
+    const label = option.textContent?.trim() || option.innerText?.trim() || "";
+
     // Skip empty options or placeholder options
-    if (value && value !== '' && label && label !== 'Seleccionar...') {
+    if (value && value !== "" && label && label !== "Seleccionar...") {
       options.push({ value, label });
     }
   });
-  
+
   console.log(`Found ${options.length} options for ${fieldId}:`, options);
   return options;
 }
 
+function fillFinalStep(data: any) {
+  console.log("fillFinalStep called with data:", data);
+
+  // Final step fields - item details
+  const finalStepFields = {
+    detalle_codigo_articulo1: data.itemCode || "",
+    detalle_descripcion1: data.itemDescription || "",
+    detalle_cantidad1: data.quantity || "1",
+    detalle_medida1: data.unitOfMeasure || "7", // Default to "unidades"
+    detalle_precio1: data.unitPrice || "",
+    detalle_importe_bonificacion1: data.bonusAmount || "",
+    otrosdatosgenerales: data.otherData || "",
+  };
+
+  let filledCount = 0;
+  let errors: string[] = [];
+
+  // Fill final step fields
+  Object.entries(finalStepFields).forEach(([fieldId, value]) => {
+    console.log(`Trying to fill field ${fieldId} with value:`, value);
+    if (value !== undefined && value !== "") {
+      const element = document.getElementById(fieldId) as
+        | HTMLInputElement
+        | HTMLSelectElement
+        | HTMLTextAreaElement;
+      if (element) {
+        console.log(`Found element ${fieldId}, setting value...`);
+
+        // Handle textarea for "Otros Datos" - need to enable editing first
+        if (fieldId === "otrosdatosgenerales") {
+          element.className = "";
+          (element as HTMLTextAreaElement).readOnly = false;
+        }
+
+        element.value = value;
+
+        // Trigger change event to ensure form validation and calculations
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+
+        // For quantity and price fields, trigger keyup to recalculate subtotal
+        if (fieldId.includes("cantidad") || fieldId.includes("precio")) {
+          element.dispatchEvent(new Event("keyup", { bubbles: true }));
+        }
+
+        filledCount++;
+        console.log(`Successfully filled ${fieldId}`);
+      } else {
+        const error = `Element with ID '${fieldId}' not found`;
+        console.error(error);
+        errors.push(error);
+      }
+    }
+  });
+
+  console.log(`Filled ${filledCount} fields, ${errors.length} errors:`, errors);
+  showNotification(
+    `Paso final completado: ${filledCount} campos rellenados`,
+    "success",
+  );
+}
+
 function updateDOMField(fieldId: string, value: string) {
   console.log(`Updating DOM field ${fieldId} with value:`, value);
-  
-  const element = document.getElementById(fieldId) as HTMLSelectElement | HTMLInputElement;
+
+  const element = document.getElementById(fieldId) as
+    | HTMLSelectElement
+    | HTMLInputElement;
   if (element) {
     element.value = value;
     // Trigger change event to ensure form validation and dependent field updates
-    element.dispatchEvent(new Event('change', { bubbles: true }));
-    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+    element.dispatchEvent(new Event("input", { bubbles: true }));
     console.log(`Successfully updated DOM field ${fieldId}`);
   } else {
     console.warn(`DOM element with ID '${fieldId}' not found`);
   }
 }
 
-function showNotification(message: string, type: 'success' | 'error' | 'info' = 'success') {
-  const notification = document.createElement('div');
-  const bgColor = type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3';
+function showNotification(
+  message: string,
+  type: "success" | "error" | "info" = "success",
+) {
+  const notification = document.createElement("div");
+  const bgColor =
+    type === "success" ? "#4CAF50" : type === "error" ? "#f44336" : "#2196F3";
   notification.style.cssText = `
     position: fixed;
     top: 80px;
@@ -405,11 +599,11 @@ function showNotification(message: string, type: 'success' | 'error' | 'info' = 
     animation: slideIn 0.3s ease;
   `;
   notification.textContent = message;
-  
+
   // Add animation keyframes
-  if (!document.getElementById('afip-helper-styles')) {
-    const style = document.createElement('style');
-    style.id = 'afip-helper-styles';
+  if (!document.getElementById("afip-helper-styles")) {
+    const style = document.createElement("style");
+    style.id = "afip-helper-styles";
     style.textContent = `
       @keyframes slideIn {
         from { transform: translateX(100%); opacity: 0; }
@@ -418,9 +612,9 @@ function showNotification(message: string, type: 'success' | 'error' | 'info' = 
     `;
     document.head.appendChild(style);
   }
-  
+
   document.body.appendChild(notification);
-  
+
   setTimeout(() => {
     notification.remove();
   }, 3000);
