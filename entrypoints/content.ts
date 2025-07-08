@@ -163,17 +163,9 @@ function createFloatingButton() {
   button.addEventListener("click", async () => {
     try {
       // Send message to background script to open sidebar/sidepanel
-      const response = await browser.runtime.sendMessage({
+      await browser.runtime.sendMessage({
         command: "openSidebar",
       });
-      if (response?.success) {
-        showNotification("Panel lateral abierto ✓", "success");
-      } else {
-        showNotification(
-          "Error al abrir panel: " + (response?.error || "Unknown error"),
-          "error",
-        );
-      }
     } catch (error) {
       console.error("Error requesting sidebar:", error);
       showNotification("Error al abrir panel lateral", "error");
